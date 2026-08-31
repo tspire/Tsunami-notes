@@ -18,11 +18,11 @@ from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.table import Table
 from rich.text import Text
+
 from tsunami_notes.animations import play_fullscreen_anim
+from tsunami_notes import crypto
 
 from .audio import play_sound
-
-from tsunami_notes import crypto
 
 console = Console()
 

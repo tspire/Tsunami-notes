@@ -51,14 +51,14 @@ lint: black
 	$(VENV_BIN)/pylint tsunami_notes
 
 build: venv
-	$(VENV_BIN)/pip wheel --no-deps --wheel-dir dist .
+	PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1 $(VENV_BIN)/pip wheel --no-deps --wheel-dir dist .
 
 install:
 	install -d -m 755 "$(OPT_DIR)"
 	install -d -m 755 "$(BIN_DIR)"
 	$(PYTHON) -m venv "$(OPT_DIR)/venv"
 	"$(OPT_DIR)/venv/bin/python" -m pip install --upgrade pip
-	"$(OPT_DIR)/venv/bin/pip" install .
+	PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1 "$(OPT_DIR)/venv/bin/pip" install .
 	printf '%s\n' '#!/bin/sh' 'exec "$(OPT_DIR)/venv/bin/tsunami" "$$@"' > "$(BIN_DIR)/tsunami"
 	chmod 755 "$(BIN_DIR)/tsunami"
 
