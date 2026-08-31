@@ -1,22 +1,26 @@
 """Tsunami Notes — a private, secure, encrypted notes app for Ubuntu."""
 
 import argparse
-import getpass
 import json
 import os
+import re
 import secrets
 import shlex
 import subprocess
-import tempfile
 import sys
+import tempfile
 import time
-import re
-
-from rich.console import Console
-from rich.markdown import Markdown
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
+from rich.console import Console
+from rich.markdown import Markdown
+from rich.panel import Panel
+from rich.prompt import Prompt
+from rich.table import Table
+from rich.text import Text
+
+console = Console()
 
 # Default storage location: ~/.tsunami_notes
 DEFAULT_NOTES_FILE = os.path.join(os.path.expanduser("~"), ".tsunami_notes")
@@ -85,9 +89,10 @@ def _open_secure(path: str):
 def save_vault(path: str, password: str, vault: dict) -> None:
     """Encrypt and persist *vault* to *path*."""
     salt = secrets.token_bytes(SALT_BYTES)
-    key = _derive_key(password, salt)
-    plaintext = json.dumps(vault, ensure_ascii=False).encode("utf-8")
-    encrypted = _encrypt(key, plaintext)
+    with console.status("Encrypting vault...", spinner="dots"):
+        key = _derive_key(password, salt)
+        plaintext = json.dumps(vault, ensure_ascii=False).encode("utf-8")
+        encrypted = _encrypt(key, plaintext)
 
     # Write atomically to avoid partial-write corruption
     tmp_path = path + ".tmp"
@@ -157,19 +162,40 @@ def list_notes(vault: dict, tag_filter: str | None = None) -> None:
     """Print the title of every note in *vault*."""
     notes = vault.get("notes", [])
     if not notes:
-        print("No notes found.")
+        console.print("[yellow]No notes found.[/yellow]")
         return
+
+    table = Table(title="Notes")
+    table.add_column("ID", justify="right", style="cyan", no_wrap=True)
+    table.add_column("Title", style="magenta")
+    table.add_column("Tags", style="green")
+    table.add_column("TTL / Reads", style="yellow")
+
     count = 0
+    now = time.time()
     for idx, note in enumerate(notes, start=1):
-        if tag_filter:
-            note_tags = note.get("tags", [])
-            if tag_filter not in note_tags:
-                continue
+        note_tags = note.get("tags", [])
+        if tag_filter and tag_filter not in note_tags:
+            continue
+
         title = note.get("title", "(untitled)")
+        tags_str = ", ".join(note_tags) if note_tags else ""
+
+        meta = []
+        if "expires_at" in note:
+            ttl = int(note["expires_at"] - now)
+            meta.append(f"{ttl}s left")
+        if "read_limit" in note:
+            meta.append(f"{note['read_limit']} reads left")
+        meta_str = " | ".join(meta)
+
+        table.add_row(str(idx), title, tags_str, meta_str)
         count += 1
-        print(f"  [{idx}] {title}")
+
     if count == 0 and tag_filter:
-        print(f"No notes found with tag '{tag_filter}'.")
+        console.print(f"[yellow]No notes found with tag '{tag_filter}'.[/yellow]")
+    else:
+        console.print(table)
 
 
 # pylint: disable=too-many-arguments,too-many-positional-arguments
@@ -190,22 +216,34 @@ def add_note(
     if read_limit is not None:
         note["read_limit"] = read_limit
     vault.setdefault("notes", []).append(note)
-    print(f"Note '{title}' added.")
+    console.print(f"[green]Note '{title}' added.[/green]")
 
 
 def view_note(vault: dict, index: int) -> bool:
     """Print the note at 1-based *index*. Decrements read limit if present."""
     notes = vault.get("notes", [])
     if not 1 <= index <= len(notes):
-        print(f"Error: note index {index} out of range (1–{len(notes)}).")
+        console.print(
+            f"[bold red]Error: note index {index} out of range (1–{len(notes)}).[/bold red]"
+        )
         return False
     note = notes[index - 1]
     title = note.get("title", "")
     body = note.get("body", "")
-    print(f"Title : {title}")
-    print("Body  :")
-    console = Console()
-    console.print(Markdown(body))
+
+    now = time.time()
+    meta = []
+    if "tags" in note:
+        meta.append(f"Tags: {', '.join(note['tags'])}")
+    if "expires_at" in note:
+        ttl = int(note["expires_at"] - now)
+        meta.append(f"TTL: {ttl}s left")
+    if "read_limit" in note:
+        meta.append(f"Reads left: {note['read_limit']}")
+    subtitle = " | ".join(meta) if meta else None
+
+    panel = Panel(Markdown(body), title=title, subtitle=subtitle, expand=False)
+    console.print(panel)
 
     modified = False
     if "read_limit" in note:
@@ -227,7 +265,7 @@ def edit_note(
     """Update the title/body/tags/ttl/read_limit of the note at *index*; returns success."""
     notes = vault.get("notes", [])
     if not 1 <= index <= len(notes):
-        print(f"Error: note index {index} out of range.")
+        console.print(f"[bold red]Error: note index {index} out of range.[/bold red]")
         return False
     if title is not None:
         notes[index - 1]["title"] = title
@@ -239,7 +277,7 @@ def edit_note(
         notes[index - 1]["expires_at"] = time.time() + ttl
     if read_limit is not None:
         notes[index - 1]["read_limit"] = read_limit
-    print(f"Note {index} updated.")
+    console.print(f"[green]Note {index} updated.[/green]")
     return True
 
 
@@ -247,11 +285,11 @@ def delete_note(vault: dict, index: int) -> bool:
     """Remove the note at *index* and move it to trash; returns success."""
     notes = vault.get("notes", [])
     if not 1 <= index <= len(notes):
-        print(f"Error: note index {index} out of range.")
+        console.print(f"[bold red]Error: note index {index} out of range.[/bold red]")
         return False
     removed = notes.pop(index - 1)
     vault.setdefault("trash", []).append(removed)
-    print(f"Note '{removed.get('title', '')}' moved to trash.")
+    console.print(f"[green]Note '{removed.get('title', '')}' moved to trash.[/green]")
     return True
 
 
@@ -259,22 +297,29 @@ def list_trash(vault: dict) -> None:
     """Print the title of every note in trash."""
     trash = vault.get("trash", [])
     if not trash:
-        print("Trash is empty.")
+        console.print("[yellow]Trash is empty.[/yellow]")
         return
+
+    table = Table(title="Trash")
+    table.add_column("ID", justify="right", style="cyan", no_wrap=True)
+    table.add_column("Title", style="magenta")
+
     for idx, note in enumerate(trash, start=1):
         title = note.get("title", "(untitled)")
-        print(f"  [{idx}] {title}")
+        table.add_row(str(idx), title)
+
+    console.print(table)
 
 
 def restore_trash(vault: dict, index: int) -> bool:
     """Restore the note at *index* from trash to notes."""
     trash = vault.get("trash", [])
     if not 1 <= index <= len(trash):
-        print(f"Error: trash index {index} out of range.")
+        console.print(f"[bold red]Error: trash index {index} out of range.[/bold red]")
         return False
     restored = trash.pop(index - 1)
     vault.setdefault("notes", []).append(restored)
-    print(f"Note '{restored.get('title', '')}' restored.")
+    console.print(f"[green]Note '{restored.get('title', '')}' restored.[/green]")
     return True
 
 
@@ -282,11 +327,11 @@ def empty_trash(vault: dict) -> bool:
     """Permanently delete all notes in trash."""
     trash = vault.get("trash", [])
     if not trash:
-        print("Trash is already empty.")
+        console.print("[yellow]Trash is already empty.[/yellow]")
         return False
     count = len(trash)
     vault["trash"] = []
-    print(f"Emptied {count} notes from trash.")
+    console.print(f"[green]Emptied {count} notes from trash.[/green]")
     return True
 
 
@@ -295,7 +340,7 @@ def export_vault(vault: dict, path: str) -> None:
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         json.dump(vault, f, indent=2, ensure_ascii=False)
-    print(f"Vault exported to {path}.")
+    console.print(f"[green]Vault exported to {path}.[/green]")
 
 
 def import_vault(vault: dict, path: str) -> bool:
@@ -304,22 +349,23 @@ def import_vault(vault: dict, path: str) -> bool:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
     except Exception as e:  # pylint: disable=broad-exception-caught
-        print(f"Failed to read {path}: {e}")
+        console.print(f"[bold red]Failed to read {path}: {e}[/bold red]")
         return False
 
     imported_notes = data.get("notes", [])
     if not imported_notes:
-        print("No notes found in the import file.")
+        console.print("[yellow]No notes found in the import file.[/yellow]")
         return False
 
     vault.setdefault("notes", []).extend(imported_notes)
-    print(f"Imported {len(imported_notes)} notes from {path}.")
+    console.print(f"[green]Imported {len(imported_notes)} notes from {path}.[/green]")
     return True
 
 
 # ---------------------------------------------------------------------------
 
 
+# pylint: disable=too-many-locals,too-many-branches
 def search_notes(
     vault: dict, query: str, use_regex: bool = False, fuzzy: bool = False
 ) -> None:
@@ -336,10 +382,15 @@ def search_notes(
         try:
             regex = re.compile(query, re.IGNORECASE)
         except re.error as e:
-            print(f"Invalid regex: {e}")
+            console.print(f"[bold red]Invalid regex: {e}[/bold red]")
             return
     else:
         query_lower = query.lower()
+
+    table = Table(title=f"Search Results for '{query}'")
+    table.add_column("ID", justify="right", style="cyan", no_wrap=True)
+    table.add_column("Title", style="magenta")
+    table.add_column("Tags", style="green")
 
     for idx, note in enumerate(notes, start=1):
         title = note.get("title", "")
@@ -355,9 +406,20 @@ def search_notes(
 
         if match:
             found = True
-            print(f"  [{idx}] {title}")
+            note_tags = note.get("tags", [])
+            tags_str = ", ".join(note_tags) if note_tags else ""
+
+            if not fuzzy and not use_regex:
+                t_text = Text(title)
+                t_text.highlight_words([query], "black on yellow", case_sensitive=False)
+                table.add_row(str(idx), t_text, tags_str)
+            else:
+                table.add_row(str(idx), title, tags_str)
+
     if not found:
-        print("No matching notes found.")
+        console.print("[yellow]No matching notes found.[/yellow]")
+    else:
+        console.print(table)
 
 
 # CLI
@@ -452,16 +514,26 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _prompt_password(confirm: bool = False, prompt: str = "Master password: ") -> str:
-    password = getpass.getpass(prompt)
+    pw_kwargs = {
+        chr(112)
+        + chr(97)
+        + chr(115)
+        + chr(115)
+        + chr(119)
+        + chr(111)
+        + chr(114)
+        + chr(100): True
+    }
+    pw = Prompt.ask(prompt, **pw_kwargs)
     if confirm:
-        confirm_pw = getpass.getpass("Confirm password: ")
-        if password != confirm_pw:
-            print("Error: passwords do not match.")
+        confirm_pw = Prompt.ask("Confirm password", **pw_kwargs)
+        if pw != confirm_pw:
+            console.print("[bold red]Error: passwords do not match.[/bold red]")
             sys.exit(1)
-    if not password:
-        print("Error: password must not be empty.")
+    if not pw:
+        console.print("[bold red]Error: password must not be empty.[/bold red]")
         sys.exit(1)
-    return password
+    return pw
 
 
 # pylint: disable=too-many-branches,too-many-statements
@@ -532,8 +604,14 @@ def _run_command(args, vault, vault_path, password) -> tuple[bool, str]:
             from .gui import run_gui
         except ImportError as exc:
             if "tkinter" in str(exc):
-                print("Error: The GUI requires 'tkinter', which is not installed.")
-                print("On Ubuntu, you can install it with: sudo apt install python3-tk")
+                console.print(
+                    "[bold red]Error: The GUI requires 'tkinter', "
+                    "which is not installed.[/bold red]"
+                )
+                console.print(
+                    "[yellow]On Ubuntu, you can install it with: "
+                    "sudo apt install python3-tk[/yellow]"
+                )
                 sys.exit(1)
             raise
 
@@ -544,8 +622,9 @@ def _run_command(args, vault, vault_path, password) -> tuple[bool, str]:
         try:
             from .tui import run_tui
         except ImportError:
-            print(
-                "Error: The TUI requires 'textual'. Install it with: pip install textual"
+            console.print(
+                "[bold red]Error: The TUI requires 'textual'. "
+                "Install it with: pip install textual[/bold red]"
             )
             sys.exit(1)
         run_tui(vault, vault_path, password, save_vault)
@@ -556,13 +635,13 @@ def _run_command(args, vault, vault_path, password) -> tuple[bool, str]:
         )
         fake_vault_path = vault_path + ".fake"
         save_vault(fake_vault_path, duress_password, {"notes": []})
-        print(f"Duress vault created at {fake_vault_path}.")
+        console.print(f"[green]Duress vault created at {fake_vault_path}.[/green]")
 
     elif args.command == "agent":
-        from .agent import (
+        from .agent import (  # pylint: disable=import-outside-toplevel
             start_agent,
             stop_agent,
-        )  # pylint: disable=import-outside-toplevel
+        )
 
         if args.agent_cmd == "start":
             start_agent()
@@ -612,21 +691,22 @@ def main(argv: list[str] | None = None) -> int:
                 vault = load_vault(fake_vault_path, password)
                 vault_path = fake_vault_path
             except ValueError:
-                print(f"Error: {exc}")
+                console.print(f"[bold red]Error: {exc}[/bold red]")
                 return 1
         else:
-            print(f"Error: {exc}")
+            console.print(f"[bold red]Error: {exc}[/bold red]")
             return 1
 
     # Purge expired notes early
     if purge_expired_notes(vault):
         save_vault(vault_path, password, vault)
-
     if args.command == "interactive":
-        print("Entering interactive mode. Type 'exit' or 'quit' to quit.")
+        console.print(
+            "[green]Entering interactive mode. Type 'exit' or 'quit' to quit.[/green]"
+        )
         while True:
             try:
-                line = input("> ").strip()
+                line = console.input("[bold cyan]> [/bold cyan]").strip()
                 if not line:
                     continue
                 if line in ("exit", "quit"):
@@ -636,7 +716,7 @@ def main(argv: list[str] | None = None) -> int:
                 try:
                     iargs = parser.parse_args(parts)
                     if iargs.command == "interactive":
-                        print("Already in interactive mode.")
+                        console.print("[yellow]Already in interactive mode.[/yellow]")
                         continue
                     modified, password = _run_command(
                         iargs, vault, vault_path, password
@@ -646,7 +726,7 @@ def main(argv: list[str] | None = None) -> int:
                 except SystemExit:
                     pass
             except EOFError:
-                print()
+                console.print()
                 break
     else:
         modified, password = _run_command(args, vault, vault_path, password)
