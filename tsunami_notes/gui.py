@@ -12,11 +12,20 @@ from tkinter import (
     filedialog,
 )  # pylint: disable=import-error
 
+from .audio import play_sound
+
 
 class TsunamiGUI(tk.Tk):
     """The main application window for Tsunami Notes."""
 
     # pylint: disable=too-many-instance-attributes
+
+    def _show_error(self, title, message):
+        play_sound("navi_listen")
+        messagebox.showerror(title, message)
+
+    def _show_info(self, title, message):
+        messagebox.showinfo(title, message)
 
     def __init__(self, vault, vault_path, password, save_vault_fn):
         super().__init__()
@@ -29,6 +38,7 @@ class TsunamiGUI(tk.Tk):
         self.title_entry = None
         self.body_text = None
         self.status_var = tk.StringVar()
+        self.keyboard_sound_enabled = tk.BooleanVar(value=False)
 
         self.title("Tsunami Notes")
         self.geometry("800x600")
@@ -45,6 +55,10 @@ class TsunamiGUI(tk.Tk):
 
         settings_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Settings", menu=settings_menu)
+        settings_menu.add_checkbutton(
+            label="Keyboard Sounds", variable=self.keyboard_sound_enabled
+        )
+        settings_menu.add_separator()
         settings_menu.add_command(label="list", command=self._cmd_list)
         settings_menu.add_command(label="add", command=self._cmd_add)
         settings_menu.add_command(label="view", command=self._cmd_view)
@@ -109,6 +123,13 @@ class TsunamiGUI(tk.Tk):
         )
         self.body_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         text_scroll.config(command=self.body_text.yview)
+
+        self.body_text.bind("<KeyPress>", self._on_key_press)
+        self.title_entry.bind("<KeyPress>", self._on_key_press)
+
+    def _on_key_press(self, event):  # pylint: disable=unused-argument
+        if self.keyboard_sound_enabled.get():
+            play_sound("keyboard_click")
 
         # Status Bar
         status_bar = ttk.Label(
@@ -213,7 +234,7 @@ class TsunamiGUI(tk.Tk):
                 self.body_text.delete("1.0", tk.END)
                 self.body_text.insert("1.0", note.get("body", ""))
             else:
-                messagebox.showerror("Error", "Invalid index.")
+                self._show_error("Error", "Invalid index.")
 
     def _cmd_edit(self):
         idx_str = simpledialog.askstring(
@@ -232,7 +253,7 @@ class TsunamiGUI(tk.Tk):
                 self.body_text.delete("1.0", tk.END)
                 self.body_text.insert("1.0", note.get("body", ""))
             else:
-                messagebox.showerror("Error", "Invalid index.")
+                self._show_error("Error", "Invalid index.")
 
     def _cmd_delete(self):
         idx_str = simpledialog.askstring("Delete Note", "Enter note index (1-based):")
@@ -251,7 +272,7 @@ class TsunamiGUI(tk.Tk):
                     self.title_entry.delete(0, tk.END)
                     self.body_text.delete("1.0", tk.END)
             else:
-                messagebox.showerror("Error", "Invalid index.")
+                self._show_error("Error", "Invalid index.")
 
     def _cmd_search(self):
         query = simpledialog.askstring("Search", "Enter keyword:")
@@ -264,9 +285,9 @@ class TsunamiGUI(tk.Tk):
                 if query.lower() in title.lower() or query.lower() in body.lower():
                     results.append(f"[{idx}] {title}")
             if results:
-                messagebox.showinfo("Search Results", "\n".join(results))
+                self._show_info("Search Results", "\n".join(results))
             else:
-                messagebox.showinfo("Search Results", "No matches found.")
+                self._show_info("Search Results", "No matches found.")
 
     def _cmd_export(self):
         path = filedialog.asksaveasfilename(
@@ -279,7 +300,7 @@ class TsunamiGUI(tk.Tk):
                     json.dump(self.vault, f, indent=2, ensure_ascii=False)
                 self.status_var.set(f"Vault exported to {path}.")
             except Exception as e:  # pylint: disable=broad-exception-caught
-                messagebox.showerror("Export Error", str(e))
+                self._show_error("Export Error", str(e))
 
     def _cmd_import(self):
         path = filedialog.askopenfilename(
@@ -298,12 +319,12 @@ class TsunamiGUI(tk.Tk):
                 self._refresh_list()
                 self.status_var.set(f"Imported {len(imported_notes)} notes.")
             except Exception as e:  # pylint: disable=broad-exception-caught
-                messagebox.showerror("Import Error", f"Failed to read {path}: {e}")
+                self._show_error("Import Error", f"Failed to read {path}: {e}")
 
     def _cmd_trash(self):
         trash = self.vault.get("trash", [])
         if not trash:
-            messagebox.showinfo("Trash", "Trash is empty.")
+            self._show_info("Trash", "Trash is empty.")
             return
 
         msg = (
@@ -314,7 +335,7 @@ class TsunamiGUI(tk.Tk):
         if action == "empty":
             self.vault["trash"] = []
             self._save_vault()
-            messagebox.showinfo("Trash", "Trash emptied.")
+            self._show_info("Trash", "Trash emptied.")
         elif action and action.isdigit():
             idx = int(action) - 1
             if 0 <= idx < len(trash):
@@ -322,12 +343,12 @@ class TsunamiGUI(tk.Tk):
                 notes.append(trash.pop(idx))
                 self._save_vault()
                 self._refresh_list()
-                messagebox.showinfo("Trash", "Item restored.")
+                self._show_info("Trash", "Item restored.")
             else:
-                messagebox.showerror("Error", "Invalid index.")
+                self._show_error("Error", "Invalid index.")
 
     def _cmd_interactive(self):
-        messagebox.showinfo(
+        self._show_info(
             "Interactive", "Please run 'tsunami interactive' in your terminal."
         )
 
@@ -342,9 +363,9 @@ class TsunamiGUI(tk.Tk):
             if new_pwd == confirm:
                 self.password = new_pwd
                 self._save_vault()
-                messagebox.showinfo("Password", "Master password changed successfully.")
+                self._show_info("Password", "Master password changed successfully.")
             else:
-                messagebox.showerror("Error", "Passwords do not match.")
+                self._show_error("Error", "Passwords do not match.")
 
 
 def run_gui(vault, vault_path, password, save_vault_fn):
