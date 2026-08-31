@@ -27,10 +27,12 @@ Private, secure, and encrypted notes app for macOS and Linux, written in Python 
 - Rust toolchain (`cargo` / `rustc`) to build the cryptography extension
 
 Depending on your OS, you may need additional packages for the virtual environment and GUI:
-- **macOS (Homebrew):** `brew install python rust python-tk`
-- **Debian / Ubuntu:** `sudo apt install python3-venv python3-tk rustc cargo`
-- **Fedora:** `sudo dnf install python3-tkinter rust cargo`
-- **Arch Linux:** `sudo pacman -S tk rust cargo`
+- **macOS (Homebrew):** `brew install python python-tk` (and `brew install rust` for the toolchain)
+- **Debian / Ubuntu:** `sudo apt install python3-venv python3-tk`
+- **Fedora:** `sudo dnf install python3-tkinter`
+- **Arch Linux:** `sudo pacman -S tk`
+
+*Note: For the Rust toolchain on Linux, we recommend using [rustup](https://rustup.rs/) rather than OS package managers, as they can sometimes provide outdated versions.*
 
 ## Development setup (virtualenv)
 
