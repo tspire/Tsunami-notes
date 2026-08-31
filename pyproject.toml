@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tsunami-notes"
+version = "0.1.0"
+description = "Private, secure, encrypted notes app for Ubuntu."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "cryptography>=41.0.0",
+]
+
+[project.scripts]
+tsunami = "tsunami_notes.notes:main"
+
+[tool.setuptools]
+packages = ["tsunami_notes"]
+
+[tool.black]
+target-version = ["py310"]

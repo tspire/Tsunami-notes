@@ -1,8 +1,6 @@
-#!/usr/bin/env python3
 """Tsunami Notes — a private, secure, encrypted notes app for Ubuntu."""
 
 import argparse
-import base64
 import getpass
 import json
 import os
@@ -103,7 +101,9 @@ def save_vault(path: str, password: str, vault: dict) -> None:
 # Note helpers
 # ---------------------------------------------------------------------------
 
+
 def list_notes(vault: dict) -> None:
+    """Print the title of every note in *vault*."""
     notes = vault.get("notes", [])
     if not notes:
         print("No notes found.")
@@ -114,11 +114,13 @@ def list_notes(vault: dict) -> None:
 
 
 def add_note(vault: dict, title: str, body: str) -> None:
+    """Append a new note with *title* and *body* to *vault*."""
     vault.setdefault("notes", []).append({"title": title, "body": body})
     print(f"Note '{title}' added.")
 
 
 def view_note(vault: dict, index: int) -> None:
+    """Print the note at 1-based *index*."""
     notes = vault.get("notes", [])
     if not 1 <= index <= len(notes):
         print(f"Error: note index {index} out of range (1–{len(notes)}).")
@@ -129,6 +131,7 @@ def view_note(vault: dict, index: int) -> None:
 
 
 def edit_note(vault: dict, index: int, title: str | None, body: str | None) -> bool:
+    """Update the title/body of the note at *index*; returns success."""
     notes = vault.get("notes", [])
     if not 1 <= index <= len(notes):
         print(f"Error: note index {index} out of range.")
@@ -142,6 +145,7 @@ def edit_note(vault: dict, index: int, title: str | None, body: str | None) -> b
 
 
 def delete_note(vault: dict, index: int) -> bool:
+    """Remove the note at *index*; returns success."""
     notes = vault.get("notes", [])
     if not 1 <= index <= len(notes):
         print(f"Error: note index {index} out of range.")
@@ -155,9 +159,11 @@ def delete_note(vault: dict, index: int) -> bool:
 # CLI
 # ---------------------------------------------------------------------------
 
+
 def build_parser() -> argparse.ArgumentParser:
+    """Build and return the command-line argument parser."""
     parser = argparse.ArgumentParser(
-        prog="tsunami-notes",
+        prog="tsunami",
         description="Private, secure, encrypted notes for Ubuntu.",
     )
     parser.add_argument(
@@ -201,6 +207,7 @@ def _prompt_password(confirm: bool = False) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run the CLI and return the process exit code."""
     parser = build_parser()
     args = parser.parse_args(argv)
 

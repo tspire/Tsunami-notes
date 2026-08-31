@@ -13,21 +13,78 @@ Private, secure, and encrypted notes app for Ubuntu, written in Python.
 
 ## Requirements
 
-```
-Python 3.10+
-cryptography >= 41.0.0
-```
+- Python 3.10+
+- `cryptography >= 41.0.0` (declared in `pyproject.toml`)
+- `python3-venv` (Ubuntu package, for `make venv` / `make install`)
 
-Install dependencies:
+## Development setup (virtualenv)
+
+Create a `.venv` and install the app in editable mode:
 
 ```bash
-pip install -r requirements.txt
+make venv
 ```
+
+Run the app from the virtualenv:
+
+```bash
+make run ARGS="list"
+# or
+.venv/bin/tsunami list
+```
+
+## Development tools
+
+Install the dev tools (`black`, `pylint`) into the `.venv`:
+
+```bash
+make dev
+```
+
+Format the code:
+
+```bash
+make black
+```
+
+Run the linter (black, then pylint):
+
+```bash
+make lint
+```
+
+Dev-only dependencies live in `requirements.dev.txt`; production dependencies
+are declared in `pyproject.toml`.
+
+## Install
+
+The app is installed into `/opt/tsunami` (its own virtualenv) with a small
+wrapper at `/usr/local/bin/tsunami`:
+
+```bash
+sudo make install
+```
+
+Remove it again with:
+
+```bash
+sudo make uninstall
+```
+
+You can also build a wheel without installing:
+
+```bash
+make build   # → dist/tsunami_notes-0.1.0-py3-none-any.whl
+```
+
+> **Note:** `make install` needs `python3-venv` and network access to download
+> `cryptography`. On Ubuntu, install the venv module once with
+> `sudo apt install python3-venv`.
 
 ## Usage
 
 ```bash
-python notes.py <command> [options]
+tsunami <command> [options]
 ```
 
 On first run a new vault is created after prompting you to set a master password.
@@ -47,28 +104,32 @@ On subsequent runs you are prompted for the existing master password.
 
 ```bash
 # Add a note
-python notes.py add "Shopping list" "Milk, eggs, bread"
+tsunami add "Shopping list" "Milk, eggs, bread"
 
 # List all notes
-python notes.py list
+tsunami list
 
 # View note #1
-python notes.py view 1
+tsunami view 1
 
 # Edit the title of note #1
-python notes.py edit 1 --title "Grocery list"
+tsunami edit 1 --title "Grocery list"
 
 # Delete note #1
-python notes.py delete 1
+tsunami delete 1
 
 # Use a custom vault path
-python notes.py --vault /path/to/my.vault list
+tsunami --vault /path/to/my.vault list
 ```
 
 ## Running Tests
 
+`make test` runs the linter (black + pylint) before the tests.
+
 ```bash
-python -m unittest test_notes -v
+make test
+# or
+.venv/bin/python -m unittest test_notes -v
 ```
 
 ## Vault File Format

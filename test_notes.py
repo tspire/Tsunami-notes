@@ -4,7 +4,7 @@ import os
 import tempfile
 import unittest
 
-from notes import (
+from tsunami_notes.notes import (
     _derive_key,
     _encrypt,
     _decrypt,
