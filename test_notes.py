@@ -191,6 +191,21 @@ class TestNoteOperations(unittest.TestCase):
         edit_note(v, 1, title=None, body=None, tags=["tag2"])
         self.assertEqual(v["notes"][0]["tags"], ["tag2"])
 
+    def test_revisions(self):
+        from tsunami_notes.notes import add_note, edit_note, rollback_revision
+
+        v = self._vault()
+        add_note(v, "T1", "B1")
+        edit_note(v, 1, title="T2", body="B2")
+        self.assertEqual(v["notes"][0]["title"], "T2")
+        self.assertEqual(len(v["notes"][0]["revisions"]), 1)
+        self.assertEqual(v["notes"][0]["revisions"][0]["title"], "T1")
+
+        rollback_revision(v, 1, 1)
+        self.assertEqual(v["notes"][0]["title"], "T1")
+        self.assertEqual(len(v["notes"][0]["revisions"]), 2)
+        self.assertEqual(v["notes"][0]["revisions"][1]["title"], "T2")
+
     def test_search_notes(self):
         from tsunami_notes.notes import search_notes
         from unittest.mock import patch
