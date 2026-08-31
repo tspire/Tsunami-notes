@@ -23,6 +23,8 @@ from rich.table import Table
 from rich.text import Text
 from tsunami_notes.animations import play_fullscreen_anim
 
+from .audio import play_sound
+
 console = Console()
 
 
@@ -696,6 +698,16 @@ def _run_command(args, vault, vault_path, password) -> tuple[bool, str]:
 # pylint: disable=import-outside-toplevel
 def main(argv: list[str] | None = None) -> int:
     """Run the CLI and return the process exit code."""
+    # Easter egg: Sudo Make Me A Sandwich
+    actual_args = argv if argv is not None else sys.argv[1:]
+    if actual_args == ["make", "me", "a", "sandwich"]:
+        is_sudo = os.environ.get("SUDO_USER") is not None
+        if is_sudo:
+            console.print("Okay.")
+        else:
+            console.print("What? Make it yourself.")
+        return 0
+
     parser = build_parser()
     args = parser.parse_args(argv)
 
@@ -718,18 +730,21 @@ def main(argv: list[str] | None = None) -> int:
         password = _prompt_password(confirm=is_new_vault)
 
     try:
-
         vault = load_vault(vault_path, password)
+        play_sound("zelda_secret")
     except ValueError as exc:
         fake_vault_path = vault_path + ".fake"
         if os.path.exists(fake_vault_path):
             try:
                 vault = load_vault(fake_vault_path, password)
                 vault_path = fake_vault_path
+                play_sound("zelda_secret")
             except ValueError:
+                play_sound("mgs_alert")
                 console.print(f"[bold red]Error: {exc}[/bold red]")
                 return 1
         else:
+            play_sound("mgs_alert")
             console.print(f"[bold red]Error: {exc}[/bold red]")
             return 1
 
