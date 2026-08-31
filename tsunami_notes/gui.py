@@ -6,6 +6,7 @@ import os
 import json
 import random
 import time
+import tkinter as tk
 from tkinter import (
     Menu,
     messagebox,
@@ -184,7 +185,7 @@ class TsunamiGUI(ctk.CTk):
 
         self.overlay = Canvas(self, bg=self.abyssal_black, highlightthickness=0)
         self.overlay.place(x=0, y=0, relwidth=1, relheight=1)
-        self.overlay.lower()  # Hide it initially by pushing it back
+        tk.Misc.lower(self.overlay)  # Hide it initially by pushing it back
 
     def _on_key_press(self, event):  # pylint: disable=unused-argument
         if self.keyboard_sound_enabled.get():
