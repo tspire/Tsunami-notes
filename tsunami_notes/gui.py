@@ -6,7 +6,15 @@ import os
 import json
 import random
 import time
-from tkinter import Menu, messagebox, simpledialog, filedialog, Canvas
+from tkinter import (
+    Menu,
+    messagebox,
+    simpledialog,
+    filedialog,
+    Canvas,
+    BooleanVar,
+    StringVar,
+)
 import customtkinter as ctk
 
 from .audio import play_sound
@@ -43,7 +51,7 @@ class TsunamiGUI(ctk.CTk):
         self.terminal_green = "#00ff00"
         self.configure(fg_color=self.abyssal_black)
 
-        self.keyboard_sound_enabled = ctk.BooleanVar(value=True)
+        self.keyboard_sound_enabled = BooleanVar(value=True)
 
         self._build_ui()
         self._refresh_list()
@@ -162,7 +170,7 @@ class TsunamiGUI(ctk.CTk):
         self.title_entry.bind("<KeyPress>", self._on_key_press)
 
         # Status Bar
-        self.status_var = ctk.StringVar()
+        self.status_var = StringVar()
         status_bar = ctk.CTkLabel(
             self,
             textvariable=self.status_var,

@@ -11,7 +11,7 @@ Private, secure, and encrypted notes app for Ubuntu, written in Python.
 - **Restrictive permissions** — vault file is saved as `0600` (owner read/write only).
 - **Dual Interface** — Simple **CLI** interface for the terminal, or a modern **GUI** with native OS styling.
 - **GUI Features**:
-  - Native OS theming with themed widgets (ttk)
+  - Cyber-Oceanic aesthetics using CustomTkinter
   - Scrollbars for notes list and editor
   - Native application menu
   - Status bar for non-intrusive feedback
