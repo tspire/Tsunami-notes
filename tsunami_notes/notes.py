@@ -14,6 +14,8 @@ import time
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 from rich.console import Console
+from rich.live import Live
+from rich.align import Align
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -21,6 +23,30 @@ from rich.table import Table
 from rich.text import Text
 
 console = Console()
+
+
+def _play_animation(message: str) -> None:
+    """Play a short ASCII animation and then display the success message."""
+    if not sys.stdout.isatty():
+        console.print(f"[green]{message}[/green]")
+        return
+    frames = [
+        "      \n      \n   ~  ",
+        "      \n   ~  \n  ~~~ ",
+        "   ~  \n  ~~~ \n ~~~~~",
+        "  ~~~ \n ~~~~~\n~~~~~~",
+        " ~~~~~\n~~~~~ \n~~~~  ",
+        "~~~~~ \n~~~~  \n~~~   ",
+        "~~~~  \n~~~   \n~~    ",
+    ]
+    with Live(refresh_per_second=10, transient=True) as live:
+        for frame in frames:
+            text = Text(frame, style="cyan")
+            panel = Panel(Align.center(text), border_style="blue")
+            live.update(panel)
+            time.sleep(0.1)
+    console.print(f"[green]{message}[/green]")
+
 
 # Default storage location: ~/.tsunami_notes
 DEFAULT_NOTES_FILE = os.path.join(os.path.expanduser("~"), ".tsunami_notes")
@@ -216,7 +242,7 @@ def add_note(
     if read_limit is not None:
         note["read_limit"] = read_limit
     vault.setdefault("notes", []).append(note)
-    console.print(f"[green]Note '{title}' added.[/green]")
+    _play_animation(f"Note '{title}' added.")
 
 
 def view_note(vault: dict, index: int) -> bool:
@@ -277,7 +303,7 @@ def edit_note(
         notes[index - 1]["expires_at"] = time.time() + ttl
     if read_limit is not None:
         notes[index - 1]["read_limit"] = read_limit
-    console.print(f"[green]Note {index} updated.[/green]")
+    _play_animation(f"Note {index} updated.")
     return True
 
 
@@ -289,7 +315,7 @@ def delete_note(vault: dict, index: int) -> bool:
         return False
     removed = notes.pop(index - 1)
     vault.setdefault("trash", []).append(removed)
-    console.print(f"[green]Note '{removed.get('title', '')}' moved to trash.[/green]")
+    _play_animation(f"Note '{removed.get('title', '')}' moved to trash.")
     return True
 
 
@@ -319,7 +345,7 @@ def restore_trash(vault: dict, index: int) -> bool:
         return False
     restored = trash.pop(index - 1)
     vault.setdefault("notes", []).append(restored)
-    console.print(f"[green]Note '{restored.get('title', '')}' restored.[/green]")
+    _play_animation(f"Note '{restored.get('title', '')}' restored.")
     return True
 
 
@@ -331,7 +357,7 @@ def empty_trash(vault: dict) -> bool:
         return False
     count = len(trash)
     vault["trash"] = []
-    console.print(f"[green]Emptied {count} notes from trash.[/green]")
+    _play_animation(f"Emptied {count} notes from trash.")
     return True
 
 
@@ -340,7 +366,7 @@ def export_vault(vault: dict, path: str) -> None:
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         json.dump(vault, f, indent=2, ensure_ascii=False)
-    console.print(f"[green]Vault exported to {path}.[/green]")
+    _play_animation(f"Vault exported to {path}.")
 
 
 def import_vault(vault: dict, path: str) -> bool:
@@ -358,7 +384,7 @@ def import_vault(vault: dict, path: str) -> bool:
         return False
 
     vault.setdefault("notes", []).extend(imported_notes)
-    console.print(f"[green]Imported {len(imported_notes)} notes from {path}.[/green]")
+    _play_animation(f"Imported {len(imported_notes)} notes from {path}.")
     return True
 
 
@@ -596,6 +622,7 @@ def _run_command(args, vault, vault_path, password) -> tuple[bool, str]:
 
     elif args.command == "passwd":
         password = _prompt_password(confirm=True, prompt="New master password: ")
+        _play_animation("Master password changed.")
         modified = True
 
     elif args.command == "gui":
@@ -635,7 +662,7 @@ def _run_command(args, vault, vault_path, password) -> tuple[bool, str]:
         )
         fake_vault_path = vault_path + ".fake"
         save_vault(fake_vault_path, duress_password, {"notes": []})
-        console.print(f"[green]Duress vault created at {fake_vault_path}.[/green]")
+        _play_animation(f"Duress vault created at {fake_vault_path}.")
 
     elif args.command == "agent":
         from .agent import (  # pylint: disable=import-outside-toplevel
