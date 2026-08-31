@@ -193,32 +193,26 @@ class TestNoteOperations(unittest.TestCase):
 
     def test_search_notes(self):
         from tsunami_notes.notes import search_notes
-        import sys
+        from unittest.mock import patch
         import io
 
         v = self._vault()
         add_note(v, "Secret meeting", "Meet at noon", [])
 
         # Test finding in title
-        captured = io.StringIO()
-        sys.stdout = captured
-        search_notes(v, "meeting")
-        sys.stdout = sys.__stdout__
-        self.assertIn("Secret meeting", captured.getvalue())
+        with patch("sys.stdout", new_callable=io.StringIO) as mock_stdout:
+            search_notes(v, "meeting")
+            self.assertIn("Secret meeting", mock_stdout.getvalue())
 
         # Test finding in body
-        captured = io.StringIO()
-        sys.stdout = captured
-        search_notes(v, "noon")
-        sys.stdout = sys.__stdout__
-        self.assertIn("Secret meeting", captured.getvalue())
+        with patch("sys.stdout", new_callable=io.StringIO) as mock_stdout:
+            search_notes(v, "noon")
+            self.assertIn("Secret meeting", mock_stdout.getvalue())
 
         # Test not finding
-        captured = io.StringIO()
-        sys.stdout = captured
-        search_notes(v, "xyz")
-        sys.stdout = sys.__stdout__
-        self.assertIn("No matching notes found", captured.getvalue())
+        with patch("sys.stdout", new_callable=io.StringIO) as mock_stdout:
+            search_notes(v, "xyz")
+            self.assertIn("No matching notes found", mock_stdout.getvalue())
 
 
 if __name__ == "__main__":

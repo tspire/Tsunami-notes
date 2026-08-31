@@ -10,13 +10,8 @@ import subprocess
 import tempfile
 import sys
 
-try:
-    from rich.console import Console
-    from rich.markdown import Markdown
-
-    RICH_AVAILABLE = True
-except ImportError:
-    RICH_AVAILABLE = False
+from rich.console import Console
+from rich.markdown import Markdown
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
@@ -118,7 +113,7 @@ def _edit_in_editor(initial_content: str = "") -> str:
     with os.fdopen(fd, "w") as f:
         f.write(initial_content)
     try:
-        subprocess.call([editor, temp_file_path])
+        subprocess.call(shlex.split(editor) + [temp_file_path])
         with open(temp_file_path, "r", encoding="utf-8") as f:
             return f.read().strip()
     finally:
@@ -168,11 +163,8 @@ def view_note(vault: dict, index: int) -> None:
     body = note.get("body", "")
     print(f"Title : {title}")
     print("Body  :")
-    if RICH_AVAILABLE:
-        console = Console()
-        console.print(Markdown(body))
-    else:
-        print(body)
+    console = Console()
+    console.print(Markdown(body))
 
 
 def edit_note(
@@ -246,7 +238,8 @@ def empty_trash(vault: dict) -> bool:
 
 def export_vault(vault: dict, path: str) -> None:
     """Export the decrypted vault to a JSON file."""
-    with open(path, "w", encoding="utf-8") as f:
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
         json.dump(vault, f, indent=2, ensure_ascii=False)
     print(f"Vault exported to {path}.")
 
