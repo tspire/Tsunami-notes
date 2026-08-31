@@ -128,7 +128,7 @@ fn save_vault(py: Python, path: &str, password: &str, vault: &Bound<'_, PyDict>)
     let text = json_dumps.call((vault,), Some(&kwargs))?.extract::<String>()?;
     let plaintext = text.as_bytes();
 
-    let mut salt = [0u8; SALT_BYTES];
+    let mut salt = vec![0u8; SALT_BYTES];
     OsRng.fill_bytes(&mut salt);
 
     let key = derive_key_internal(password, &salt)
