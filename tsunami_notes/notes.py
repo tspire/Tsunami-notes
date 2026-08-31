@@ -244,7 +244,12 @@ def main(argv: list[str] | None = None) -> int:
 
     elif args.command == "gui":
         # pylint: disable=import-outside-toplevel
-        from .gui import run_gui
+        try:
+            from .gui import run_gui
+        except ImportError:
+            print("Error: The GUI requires 'tkinter', which is not installed.")
+            print("On Ubuntu, you can install it with: sudo apt install python3-tk")
+            return 1
 
         run_gui(vault, vault_path, password, save_vault)
 

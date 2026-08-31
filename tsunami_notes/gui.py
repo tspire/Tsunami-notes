@@ -1,7 +1,7 @@
 """GUI implementation for Tsunami Notes."""
 
-import tkinter as tk
-from tkinter import messagebox, simpledialog
+import tkinter as tk  # pylint: disable=import-error
+from tkinter import messagebox, simpledialog  # pylint: disable=import-error
 
 
 class TsunamiGUI(tk.Tk):
