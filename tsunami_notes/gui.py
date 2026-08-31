@@ -175,7 +175,21 @@ class TsunamiGUI(tk.Tk):
                 messagebox.showerror("Error", "Invalid index.")
 
     def _cmd_edit(self):
-        self._cmd_view()
+        idx_str = simpledialog.askstring("Edit Note", "Enter note index (1-based) to edit:")
+        if idx_str and idx_str.isdigit():
+            idx = int(idx_str) - 1
+            notes = self.vault.get("notes", [])
+            if 0 <= idx < len(notes):
+                self.listbox.selection_clear(0, tk.END)
+                self.listbox.selection_set(idx)
+                self.current_index = idx
+                note = notes[idx]
+                self.title_entry.delete(0, tk.END)
+                self.title_entry.insert(0, note.get("title", ""))
+                self.body_text.delete("1.0", tk.END)
+                self.body_text.insert("1.0", note.get("body", ""))
+            else:
+                messagebox.showerror("Error", "Invalid index.")
 
     def _cmd_delete(self):
         idx_str = simpledialog.askstring("Delete Note", "Enter note index (1-based):")
