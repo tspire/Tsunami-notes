@@ -596,8 +596,12 @@ def _run_command(args, vault, vault_path, password) -> tuple[bool, str]:
                 if sys.platform == "darwin":
                     console.print("[yellow]  macOS: brew install python-tk[/yellow]")
                 else:
-                    console.print("[yellow]  Debian/Ubuntu: sudo apt install python3-tk[/yellow]")
-                    console.print("[yellow]  Fedora: sudo dnf install python3-tkinter[/yellow]")
+                    console.print(
+                        "[yellow]  Debian/Ubuntu: sudo apt install python3-tk[/yellow]"
+                    )
+                    console.print(
+                        "[yellow]  Fedora: sudo dnf install python3-tkinter[/yellow]"
+                    )
                     console.print("[yellow]  Arch Linux: sudo pacman -S tk[/yellow]")
                 sys.exit(1)
             raise
