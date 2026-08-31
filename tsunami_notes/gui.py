@@ -1,7 +1,5 @@
 """GUI implementation for Tsunami Notes."""
 
-# pylint: disable=cyclic-import
-
 import tkinter as tk
 from tkinter import messagebox, simpledialog
 
@@ -9,11 +7,14 @@ from tkinter import messagebox, simpledialog
 class TsunamiGUI(tk.Tk):
     """The main application window for Tsunami Notes."""
 
-    def __init__(self, vault, vault_path, password):
+    # pylint: disable=too-many-instance-attributes
+
+    def __init__(self, vault, vault_path, password, save_vault_fn):
         super().__init__()
         self.vault = vault
         self.vault_path = vault_path
         self.password = password
+        self.save_vault_fn = save_vault_fn
         self.current_index = None
         self.listbox = None
         self.title_entry = None
@@ -69,7 +70,7 @@ class TsunamiGUI(tk.Tk):
 
         index = selection[0]
         self.current_index = index
-        note = self.vault.setdefault("notes", [])[index]
+        note = self.vault["notes"][index]
 
         self.title_entry.delete(0, tk.END)
         self.title_entry.insert(0, note.get("title", ""))
@@ -85,8 +86,13 @@ class TsunamiGUI(tk.Tk):
             self._save_vault()
             self._refresh_list()
             self.listbox.selection_clear(0, tk.END)
-            self.listbox.selection_set(tk.END)
-            self.on_select(None)
+            last_index = self.listbox.size() - 1
+            self.listbox.selection_set(last_index)
+            # manually trigger on_select behavior to avoid reliance on event loop
+            self.current_index = last_index
+            self.title_entry.delete(0, tk.END)
+            self.title_entry.insert(0, title)
+            self.body_text.delete("1.0", tk.END)
 
     def delete_note(self):
         """Delete the currently selected note."""
@@ -94,12 +100,16 @@ class TsunamiGUI(tk.Tk):
             if messagebox.askyesno(
                 "Confirm Delete", "Are you sure you want to delete this note?"
             ):
-                self.vault["notes"].pop(self.current_index)
+                notes = self.vault.get("notes", [])
+                if 0 <= self.current_index < len(notes):
+                    notes.pop(self.current_index)
                 self.current_index = None
                 self.title_entry.delete(0, tk.END)
                 self.body_text.delete("1.0", tk.END)
                 self._save_vault()
                 self._refresh_list()
+        else:
+            messagebox.showinfo("No Selection", "Please select a note to delete.")
 
     def save_current_note(self):
         """Save changes to the currently edited note."""
@@ -116,12 +126,10 @@ class TsunamiGUI(tk.Tk):
 
     def _save_vault(self):
         """Save the vault securely."""
-        from .notes import save_vault  # pylint: disable=import-outside-toplevel
-
-        save_vault(self.vault_path, self.password, self.vault)
+        self.save_vault_fn(self.vault_path, self.password, self.vault)
 
 
-def run_gui(vault, vault_path, password):
+def run_gui(vault, vault_path, password, save_vault_fn):
     """Launch the Tkinter GUI."""
-    app = TsunamiGUI(vault, vault_path, password)
+    app = TsunamiGUI(vault, vault_path, password, save_vault_fn)
     app.mainloop()

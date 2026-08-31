@@ -246,7 +246,7 @@ def main(argv: list[str] | None = None) -> int:
         # pylint: disable=import-outside-toplevel
         from .gui import run_gui
 
-        run_gui(vault, vault_path, password)
+        run_gui(vault, vault_path, password, save_vault)
 
     if modified:
         save_vault(vault_path, password, vault)
