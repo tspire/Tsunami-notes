@@ -6,7 +6,7 @@ DEV_STAMP := $(VENV)/.dev-installed
 OPT_DIR ?= /opt/tsunami
 BIN_DIR ?= /usr/local/bin
 
-.PHONY: help venv dev run test black lint build install uninstall clean
+.PHONY: help venv dev run test black lint build install uninstall clean check-install-venv check-venv
 
 .DEFAULT_GOAL := help
 
@@ -25,17 +25,25 @@ help:
 	@echo "  make clean         Remove .venv and build artifacts"
 	@echo ""
 
-venv: $(VENV_BIN)/activate
+check-venv:
+	@if [ -f "$(VENV_BIN)/python" ]; then \
+		if ! "$(VENV_BIN)/python" -c 'import sys; sys.exit(0 if sys.version_info >= (3,10) else 1)' 2>/dev/null; then \
+			echo "Stale venv detected (Python < 3.10). Removing $(VENV)..."; \
+			rm -rf "$(VENV)"; \
+		fi; \
+	fi
+
+venv: check-venv $(VENV_BIN)/activate
 
 $(VENV_BIN)/activate:
 	$(PYTHON) -m venv $(VENV)
-	$(VENV_BIN)/python -m pip install --upgrade pip
-	$(VENV_BIN)/pip install -e .
+	$(VENV_BIN)/python -m pip install --no-cache-dir --upgrade pip
+	$(VENV_BIN)/pip install --no-cache-dir -e .
 
 dev: $(DEV_STAMP)
 
 $(DEV_STAMP): $(VENV_BIN)/activate requirements.dev.txt
-	$(VENV_BIN)/pip install -r requirements.dev.txt
+	$(VENV_BIN)/pip install --no-cache-dir -r requirements.dev.txt
 	touch $(DEV_STAMP)
 
 run: venv
@@ -53,12 +61,20 @@ lint: black
 build: venv
 	PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1 $(VENV_BIN)/pip wheel --no-deps --wheel-dir dist .
 
-install:
+check-install-venv:
+	@if [ -f "$(OPT_DIR)/venv/bin/python" ]; then \
+		if ! "$(OPT_DIR)/venv/bin/python" -c 'import sys; sys.exit(0 if sys.version_info >= (3,10) else 1)' 2>/dev/null; then \
+			echo "Stale venv detected (Python < 3.10). Removing $(OPT_DIR)/venv..."; \
+			rm -rf "$(OPT_DIR)/venv"; \
+		fi; \
+	fi
+
+install: check-install-venv
 	install -d -m 755 "$(OPT_DIR)"
 	install -d -m 755 "$(BIN_DIR)"
 	$(PYTHON) -m venv "$(OPT_DIR)/venv"
-	"$(OPT_DIR)/venv/bin/python" -m pip install --upgrade pip
-	PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1 "$(OPT_DIR)/venv/bin/pip" install .
+	"$(OPT_DIR)/venv/bin/python" -m pip install --no-cache-dir --upgrade pip
+	PYO3_USE_ABI3_FORWARD_COMPATIBILITY=1 "$(OPT_DIR)/venv/bin/pip" install --no-cache-dir .
 	printf '%s\n' '#!/bin/sh' 'exec "$(OPT_DIR)/venv/bin/tsunami" "$$@"' > "$(BIN_DIR)/tsunami"
 	chmod 755 "$(BIN_DIR)/tsunami"
 
