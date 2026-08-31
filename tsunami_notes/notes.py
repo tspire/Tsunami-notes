@@ -340,6 +340,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("passwd", help="Change the master password.")
 
+    sub.add_parser("gui", help="Launch the GUI.")
+
     return parser
 
 
@@ -356,8 +358,8 @@ def _prompt_password(confirm: bool = False, prompt: str = "Master password: ") -
     return password
 
 
-# pylint: disable=too-many-branches
-def _run_command(args, vault, password) -> tuple[bool, str]:
+# pylint: disable=too-many-branches,too-many-statements
+def _run_command(args, vault, vault_path, password) -> tuple[bool, str]:
     """Execute the command specified in args. Returns (modified, password)."""
     modified = False
 
@@ -412,6 +414,19 @@ def _run_command(args, vault, password) -> tuple[bool, str]:
         password = _prompt_password(confirm=True, prompt="New master password: ")
         modified = True
 
+    elif args.command == "gui":
+        # pylint: disable=import-outside-toplevel
+        try:
+            from .gui import run_gui
+        except ImportError as e:
+            if "tkinter" in str(e):
+                print("Error: The GUI requires 'tkinter', which is not installed.")
+                print("On Ubuntu, you can install it with: sudo apt install python3-tk")
+                sys.exit(1)
+            raise
+
+        run_gui(vault, vault_path, password, save_vault)
+
     return modified, password
 
 
@@ -448,7 +463,9 @@ def main(argv: list[str] | None = None) -> int:
                     if iargs.command == "interactive":
                         print("Already in interactive mode.")
                         continue
-                    modified, password = _run_command(iargs, vault, password)
+                    modified, password = _run_command(
+                        iargs, vault, vault_path, password
+                    )
                     if modified:
                         save_vault(vault_path, password, vault)
                 except SystemExit:
@@ -457,7 +474,7 @@ def main(argv: list[str] | None = None) -> int:
                 print()
                 break
     else:
-        modified, password = _run_command(args, vault, password)
+        modified, password = _run_command(args, vault, vault_path, password)
         if modified:
             save_vault(vault_path, password, vault)
 
