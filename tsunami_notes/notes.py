@@ -1,4 +1,4 @@
-"""Tsunami Notes — a private, secure, encrypted notes app for Ubuntu."""
+"""Tsunami Notes — a private, secure, encrypted notes app for macOS and Linux."""
 
 import argparse
 import json
@@ -413,7 +413,7 @@ def build_parser() -> argparse.ArgumentParser:
     """Build and return the command-line argument parser."""
     parser = argparse.ArgumentParser(
         prog="tsunami",
-        description="Private, secure, encrypted notes for Ubuntu.",
+        description="Private, secure, encrypted notes for macOS and Linux.",
     )
     parser.add_argument(
         "--vault",
@@ -592,10 +592,17 @@ def _run_command(args, vault, vault_path, password) -> tuple[bool, str]:
                     "[bold red]Error: The GUI requires 'tkinter', "
                     "which is not installed.[/bold red]"
                 )
-                console.print(
-                    "[yellow]On Ubuntu, you can install it with: "
-                    "sudo apt install python3-tk[/yellow]"
-                )
+                console.print("[yellow]To install tkinter:[/yellow]")
+                if sys.platform == "darwin":
+                    console.print("[yellow]  macOS: brew install python-tk[/yellow]")
+                else:
+                    console.print(
+                        "[yellow]  Debian/Ubuntu: sudo apt install python3-tk[/yellow]"
+                    )
+                    console.print(
+                        "[yellow]  Fedora: sudo dnf install python3-tkinter[/yellow]"
+                    )
+                    console.print("[yellow]  Arch Linux: sudo pacman -S tk[/yellow]")
                 sys.exit(1)
             raise
 
