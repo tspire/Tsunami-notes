@@ -262,7 +262,7 @@ class TsunamiGUI(ctk.CTk):
                 time.sleep(0.03)
 
         self.overlay.delete("all")
-        self.overlay.lower()
+        tk.Misc.lower(self.overlay)
 
     def add_note(self):
         """Prompt and add a new note."""
