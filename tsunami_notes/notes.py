@@ -436,7 +436,17 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("gui", help="Launch the GUI.")
     sub.add_parser("tui", help="Launch the Textual TUI.")
+
     sub.add_parser("duress-setup", help="Set up a duress PIN/password and fake vault.")
+
+    agent_p = sub.add_parser("agent", help="Manage background password agent.")
+    agent_p.add_argument(
+        "agent_cmd", choices=["start", "stop"], help="Start or stop the agent."
+    )
+
+    sub.add_parser(
+        "unlock", help="Cache the master password in the agent for this session."
+    )
 
     return parser
 
@@ -455,6 +465,7 @@ def _prompt_password(confirm: bool = False, prompt: str = "Master password: ") -
 
 
 # pylint: disable=too-many-branches,too-many-statements
+# pylint: disable=too-many-locals,import-outside-toplevel
 def _run_command(args, vault, vault_path, password) -> tuple[bool, str]:
     """Execute the command specified in args. Returns (modified, password)."""
     modified = purge_expired_notes(vault)
@@ -547,10 +558,27 @@ def _run_command(args, vault, vault_path, password) -> tuple[bool, str]:
         save_vault(fake_vault_path, duress_password, {"notes": []})
         print(f"Duress vault created at {fake_vault_path}.")
 
+    elif args.command == "agent":
+        from .agent import (
+            start_agent,
+            stop_agent,
+        )  # pylint: disable=import-outside-toplevel
+
+        if args.agent_cmd == "start":
+            start_agent()
+        elif args.agent_cmd == "stop":
+            stop_agent()
+
+    elif args.command == "unlock":
+        from .agent import set_password  # pylint: disable=import-outside-toplevel
+
+        set_password(password)
+
     return modified, password
 
 
 # pylint: disable=too-many-branches
+# pylint: disable=import-outside-toplevel
 def main(argv: list[str] | None = None) -> int:
     """Run the CLI and return the process exit code."""
     parser = build_parser()
@@ -559,9 +587,23 @@ def main(argv: list[str] | None = None) -> int:
     vault_path = args.vault
     is_new_vault = not os.path.exists(vault_path)
 
-    password = _prompt_password(confirm=is_new_vault)
+    # Try agent first if not interactive and not creating a new vault
+    password = None
+    if not is_new_vault:
+        try:
+            from .agent import get_password  # pylint: disable=import-outside-toplevel
+
+            agent_pw = get_password()
+            if agent_pw:
+                password = agent_pw
+        except ImportError:
+            pass
+
+    if not password:
+        password = _prompt_password(confirm=is_new_vault)
 
     try:
+
         vault = load_vault(vault_path, password)
     except ValueError as exc:
         fake_vault_path = vault_path + ".fake"
