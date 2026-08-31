@@ -190,6 +190,8 @@ def build_parser() -> argparse.ArgumentParser:
     del_p = sub.add_parser("delete", help="Delete a note by index.")
     del_p.add_argument("index", type=int, help="1-based note index.")
 
+    sub.add_parser("gui", help="Launch the GUI.")
+
     return parser
 
 
@@ -239,6 +241,12 @@ def main(argv: list[str] | None = None) -> int:
 
     elif args.command == "delete":
         modified = delete_note(vault, args.index)
+
+    elif args.command == "gui":
+        # pylint: disable=import-outside-toplevel
+        from .gui import run_gui
+
+        run_gui(vault, vault_path, password)
 
     if modified:
         save_vault(vault_path, password, vault)
