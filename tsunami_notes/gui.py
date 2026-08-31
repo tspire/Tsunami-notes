@@ -175,7 +175,9 @@ class TsunamiGUI(tk.Tk):
                 messagebox.showerror("Error", "Invalid index.")
 
     def _cmd_edit(self):
-        idx_str = simpledialog.askstring("Edit Note", "Enter note index (1-based) to edit:")
+        idx_str = simpledialog.askstring(
+            "Edit Note", "Enter note index (1-based) to edit:"
+        )
         if idx_str and idx_str.isdigit():
             idx = int(idx_str) - 1
             notes = self.vault.get("notes", [])
