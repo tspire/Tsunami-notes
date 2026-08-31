@@ -119,8 +119,8 @@ class TsunamiGUI(tk.Tk):
     def _refresh_list(self):
         """Refresh the list of notes in the Listbox."""
         self.listbox.delete(0, tk.END)
-        for note in self.vault.get("notes", []):
-            self.listbox.insert(tk.END, note.get("title", "(untitled)"))
+        for i, note in enumerate(self.vault.get("notes", [])):
+            self.listbox.insert(tk.END, f"{i+1}. {note.get('title', '(untitled)')}")
 
     def on_select(self, event):  # pylint: disable=unused-argument
         """Handle listbox selection."""
