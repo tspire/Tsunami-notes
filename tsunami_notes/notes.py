@@ -21,6 +21,7 @@ from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.table import Table
 from rich.text import Text
+from tsunami_notes.animations import play_fullscreen_anim
 
 console = Console()
 
@@ -191,6 +192,8 @@ def list_notes(vault: dict, tag_filter: str | None = None) -> None:
         console.print("[yellow]No notes found.[/yellow]")
         return
 
+    play_fullscreen_anim("list", "")
+
     table = Table(title="Notes")
     table.add_column("ID", justify="right", style="cyan", no_wrap=True)
     table.add_column("Title", style="magenta")
@@ -242,7 +245,7 @@ def add_note(
     if read_limit is not None:
         note["read_limit"] = read_limit
     vault.setdefault("notes", []).append(note)
-    _play_animation(f"Note '{title}' added.")
+    play_fullscreen_anim("add", f"Note '{title}' added.")
 
 
 def view_note(vault: dict, index: int) -> bool:
@@ -256,6 +259,8 @@ def view_note(vault: dict, index: int) -> bool:
     note = notes[index - 1]
     title = note.get("title", "")
     body = note.get("body", "")
+
+    play_fullscreen_anim("show", "")
 
     now = time.time()
     meta = []
@@ -303,7 +308,7 @@ def edit_note(
         notes[index - 1]["expires_at"] = time.time() + ttl
     if read_limit is not None:
         notes[index - 1]["read_limit"] = read_limit
-    _play_animation(f"Note {index} updated.")
+    play_fullscreen_anim("edit", f"Note {index} updated.")
     return True
 
 
@@ -315,7 +320,7 @@ def delete_note(vault: dict, index: int) -> bool:
         return False
     removed = notes.pop(index - 1)
     vault.setdefault("trash", []).append(removed)
-    _play_animation(f"Note '{removed.get('title', '')}' moved to trash.")
+    play_fullscreen_anim("trash", f"Note '{removed.get('title', '')}' moved to trash.")
     return True
 
 
@@ -325,6 +330,8 @@ def list_trash(vault: dict) -> None:
     if not trash:
         console.print("[yellow]Trash is empty.[/yellow]")
         return
+
+    play_fullscreen_anim("list", "")
 
     table = Table(title="Trash")
     table.add_column("ID", justify="right", style="cyan", no_wrap=True)
@@ -345,7 +352,7 @@ def restore_trash(vault: dict, index: int) -> bool:
         return False
     restored = trash.pop(index - 1)
     vault.setdefault("notes", []).append(restored)
-    _play_animation(f"Note '{restored.get('title', '')}' restored.")
+    play_fullscreen_anim("restore", f"Note '{restored.get('title', '')}' restored.")
     return True
 
 
@@ -357,7 +364,7 @@ def empty_trash(vault: dict) -> bool:
         return False
     count = len(trash)
     vault["trash"] = []
-    _play_animation(f"Emptied {count} notes from trash.")
+    play_fullscreen_anim("empty-trash", f"Emptied {count} notes from trash.")
     return True
 
 
@@ -366,7 +373,7 @@ def export_vault(vault: dict, path: str) -> None:
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         json.dump(vault, f, indent=2, ensure_ascii=False)
-    _play_animation(f"Vault exported to {path}.")
+    play_fullscreen_anim("export", f"Vault exported to {path}.")
 
 
 def import_vault(vault: dict, path: str) -> bool:
@@ -384,7 +391,7 @@ def import_vault(vault: dict, path: str) -> bool:
         return False
 
     vault.setdefault("notes", []).extend(imported_notes)
-    _play_animation(f"Imported {len(imported_notes)} notes from {path}.")
+    play_fullscreen_anim("import", f"Imported {len(imported_notes)} notes from {path}.")
     return True
 
 
@@ -412,6 +419,8 @@ def search_notes(
             return
     else:
         query_lower = query.lower()
+
+    play_fullscreen_anim("search", "")
 
     table = Table(title=f"Search Results for '{query}'")
     table.add_column("ID", justify="right", style="cyan", no_wrap=True)
@@ -622,7 +631,7 @@ def _run_command(args, vault, vault_path, password) -> tuple[bool, str]:
 
     elif args.command == "passwd":
         password = _prompt_password(confirm=True, prompt="New master password: ")
-        _play_animation("Master password changed.")
+        play_fullscreen_anim("passwd", "Master password changed.")
         modified = True
 
     elif args.command == "gui":
@@ -662,7 +671,7 @@ def _run_command(args, vault, vault_path, password) -> tuple[bool, str]:
         )
         fake_vault_path = vault_path + ".fake"
         save_vault(fake_vault_path, duress_password, {"notes": []})
-        _play_animation(f"Duress vault created at {fake_vault_path}.")
+        play_fullscreen_anim("duress", f"Duress vault created at {fake_vault_path}.")
 
     elif args.command == "agent":
         from .agent import (  # pylint: disable=import-outside-toplevel
