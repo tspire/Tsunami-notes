@@ -9,6 +9,8 @@ import shlex
 import subprocess
 import tempfile
 import sys
+import time
+import re
 
 from rich.console import Console
 from rich.markdown import Markdown
@@ -120,6 +122,33 @@ def _edit_in_editor(initial_content: str = "") -> str:
         os.remove(temp_file_path)
 
 
+def purge_expired_notes(vault: dict) -> bool:
+    """Remove notes that have expired (TTL or read limit) from the vault."""
+    notes = vault.get("notes", [])
+    if not notes:
+        return False
+    now = time.time()
+    to_keep = []
+    modified = False
+    for note in notes:
+        expires_at = note.get("expires_at")
+        read_limit = note.get("read_limit")
+
+        expired = False
+        if expires_at is not None and now >= expires_at:
+            expired = True
+        elif read_limit is not None and read_limit <= 0:
+            expired = True
+
+        if expired:
+            modified = True
+        else:
+            to_keep.append(note)
+    if modified:
+        vault["notes"] = to_keep
+    return modified
+
+
 # Note helpers
 # ---------------------------------------------------------------------------
 
@@ -143,21 +172,33 @@ def list_notes(vault: dict, tag_filter: str | None = None) -> None:
         print(f"No notes found with tag '{tag_filter}'.")
 
 
-def add_note(vault: dict, title: str, body: str, tags: list[str] | None = None) -> None:
+# pylint: disable=too-many-arguments,too-many-positional-arguments
+def add_note(
+    vault: dict,
+    title: str,
+    body: str,
+    tags: list[str] | None = None,
+    ttl: int | None = None,
+    read_limit: int | None = None,
+) -> None:
     """Append a new note with *title* and *body* to *vault*."""
     note = {"title": title, "body": body}
     if tags:
         note["tags"] = tags
+    if ttl is not None:
+        note["expires_at"] = time.time() + ttl
+    if read_limit is not None:
+        note["read_limit"] = read_limit
     vault.setdefault("notes", []).append(note)
     print(f"Note '{title}' added.")
 
 
-def view_note(vault: dict, index: int) -> None:
-    """Print the note at 1-based *index*."""
+def view_note(vault: dict, index: int) -> bool:
+    """Print the note at 1-based *index*. Decrements read limit if present."""
     notes = vault.get("notes", [])
     if not 1 <= index <= len(notes):
         print(f"Error: note index {index} out of range (1–{len(notes)}).")
-        return
+        return False
     note = notes[index - 1]
     title = note.get("title", "")
     body = note.get("body", "")
@@ -166,15 +207,24 @@ def view_note(vault: dict, index: int) -> None:
     console = Console()
     console.print(Markdown(body))
 
+    modified = False
+    if "read_limit" in note:
+        note["read_limit"] -= 1
+        modified = True
+    return modified
 
+
+# pylint: disable=too-many-arguments,too-many-positional-arguments
 def edit_note(
     vault: dict,
     index: int,
     title: str | None,
     body: str | None,
     tags: list[str] | None = None,
+    ttl: int | None = None,
+    read_limit: int | None = None,
 ) -> bool:
-    """Update the title/body of the note at *index*; returns success."""
+    """Update the title/body/tags/ttl/read_limit of the note at *index*; returns success."""
     notes = vault.get("notes", [])
     if not 1 <= index <= len(notes):
         print(f"Error: note index {index} out of range.")
@@ -185,6 +235,10 @@ def edit_note(
         notes[index - 1]["body"] = body
     if tags is not None:
         notes[index - 1]["tags"] = tags
+    if ttl is not None:
+        notes[index - 1]["expires_at"] = time.time() + ttl
+    if read_limit is not None:
+        notes[index - 1]["read_limit"] = read_limit
     print(f"Note {index} updated.")
     return True
 
@@ -266,15 +320,40 @@ def import_vault(vault: dict, path: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def search_notes(vault: dict, query: str) -> None:
+def search_notes(
+    vault: dict, query: str, use_regex: bool = False, fuzzy: bool = False
+) -> None:
     """Search notes by matching *query* in title or body."""
     notes = vault.get("notes", [])
-    query = query.lower()
     found = False
+    regex = None
+    query_lower = ""
+
+    if fuzzy:
+        pattern = ".*?".join(map(re.escape, query))
+        regex = re.compile(pattern, re.IGNORECASE)
+    elif use_regex:
+        try:
+            regex = re.compile(query, re.IGNORECASE)
+        except re.error as e:
+            print(f"Invalid regex: {e}")
+            return
+    else:
+        query_lower = query.lower()
+
     for idx, note in enumerate(notes, start=1):
         title = note.get("title", "")
         body = note.get("body", "")
-        if query in title.lower() or query in body.lower():
+
+        match = False
+        if fuzzy or use_regex:
+            if regex.search(title) or regex.search(body):
+                match = True
+        else:
+            if query_lower in title.lower() or query_lower in body.lower():
+                match = True
+
+        if match:
             found = True
             print(f"  [{idx}] {title}")
     if not found:
@@ -304,7 +383,12 @@ def build_parser() -> argparse.ArgumentParser:
     add_p = sub.add_parser("add", help="Add a new note.")
     add_p.add_argument("title", help="Note title.")
     add_p.add_argument("body", nargs="?", default=None, help="Note body text.")
+
     add_p.add_argument("--tags", help="Comma separated tags.")
+    add_p.add_argument("--ttl", type=int, help="Time to live in seconds.")
+    add_p.add_argument(
+        "--read-limit", type=int, help="Number of times this note can be read."
+    )
 
     view_p = sub.add_parser("view", help="View a note by index.")
     view_p.add_argument("index", type=int, help="1-based note index.")
@@ -313,13 +397,23 @@ def build_parser() -> argparse.ArgumentParser:
     edit_p.add_argument("index", type=int, help="1-based note index.")
     edit_p.add_argument("--title", default=None, help="New title.")
     edit_p.add_argument("--body", default=None, help="New body text.")
+
     edit_p.add_argument("--tags", help="Comma separated tags.")
+    edit_p.add_argument("--ttl", type=int, help="Time to live in seconds.")
+    edit_p.add_argument(
+        "--read-limit", type=int, help="Number of times this note can be read."
+    )
 
     del_p = sub.add_parser("delete", help="Delete a note by index.")
     del_p.add_argument("index", type=int, help="1-based note index.")
 
     search_p = sub.add_parser("search", help="Search notes by keyword.")
+
     search_p.add_argument("query", help="Keyword to search for.")
+    search_p.add_argument(
+        "--regex", action="store_true", help="Use regular expression."
+    )
+    search_p.add_argument("--fuzzy", action="store_true", help="Use fuzzy matching.")
 
     export_p = sub.add_parser("export", help="Export the decrypted vault to JSON.")
     export_p.add_argument("file", help="Path to export the JSON file.")
@@ -341,6 +435,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("passwd", help="Change the master password.")
 
     sub.add_parser("gui", help="Launch the GUI.")
+    sub.add_parser("tui", help="Launch the Textual TUI.")
+    sub.add_parser("duress-setup", help="Set up a duress PIN/password and fake vault.")
 
     return parser
 
@@ -361,7 +457,7 @@ def _prompt_password(confirm: bool = False, prompt: str = "Master password: ") -
 # pylint: disable=too-many-branches,too-many-statements
 def _run_command(args, vault, vault_path, password) -> tuple[bool, str]:
     """Execute the command specified in args. Returns (modified, password)."""
-    modified = False
+    modified = purge_expired_notes(vault)
 
     if args.command == "list":
         list_notes(vault, args.tag)
@@ -373,11 +469,12 @@ def _run_command(args, vault, vault_path, password) -> tuple[bool, str]:
         tags = [t.strip() for t in args.tags.split(",")] if args.tags else None
         if tags is not None:
             tags = [t for t in tags if t]
-        add_note(vault, args.title, body, tags)
+        add_note(vault, args.title, body, tags, args.ttl, args.read_limit)
         modified = True
 
     elif args.command == "view":
-        view_note(vault, args.index)
+        if view_note(vault, args.index):
+            modified = True
 
     elif args.command == "edit":
         body = args.body
@@ -388,13 +485,17 @@ def _run_command(args, vault, vault_path, password) -> tuple[bool, str]:
         tags = [t.strip() for t in args.tags.split(",")] if args.tags else None
         if tags is not None:
             tags = [t for t in tags if t]
-        modified = edit_note(vault, args.index, args.title, body, tags)
+        mod = edit_note(
+            vault, args.index, args.title, body, tags, args.ttl, args.read_limit
+        )
+        if mod:
+            modified = True
 
     elif args.command == "delete":
         modified = delete_note(vault, args.index)
 
     elif args.command == "search":
-        search_notes(vault, args.query)
+        search_notes(vault, args.query, args.regex, args.fuzzy)
 
     elif args.command == "export":
         export_vault(vault, args.file)
@@ -418,14 +519,33 @@ def _run_command(args, vault, vault_path, password) -> tuple[bool, str]:
         # pylint: disable=import-outside-toplevel
         try:
             from .gui import run_gui
-        except ImportError as e:
-            if "tkinter" in str(e):
+        except ImportError as exc:
+            if "tkinter" in str(exc):
                 print("Error: The GUI requires 'tkinter', which is not installed.")
                 print("On Ubuntu, you can install it with: sudo apt install python3-tk")
                 sys.exit(1)
             raise
 
         run_gui(vault, vault_path, password, save_vault)
+
+    elif args.command == "tui":
+        # pylint: disable=import-outside-toplevel
+        try:
+            from .tui import run_tui
+        except ImportError:
+            print(
+                "Error: The TUI requires 'textual'. Install it with: pip install textual"
+            )
+            sys.exit(1)
+        run_tui(vault, vault_path, password, save_vault)
+
+    elif args.command == "duress-setup":
+        duress_password = _prompt_password(
+            confirm=True, prompt="New duress password/PIN: "
+        )
+        fake_vault_path = vault_path + ".fake"
+        save_vault(fake_vault_path, duress_password, {"notes": []})
+        print(f"Duress vault created at {fake_vault_path}.")
 
     return modified, password
 
@@ -444,8 +564,21 @@ def main(argv: list[str] | None = None) -> int:
     try:
         vault = load_vault(vault_path, password)
     except ValueError as exc:
-        print(f"Error: {exc}")
-        return 1
+        fake_vault_path = vault_path + ".fake"
+        if os.path.exists(fake_vault_path):
+            try:
+                vault = load_vault(fake_vault_path, password)
+                vault_path = fake_vault_path
+            except ValueError:
+                print(f"Error: {exc}")
+                return 1
+        else:
+            print(f"Error: {exc}")
+            return 1
+
+    # Purge expired notes early
+    if purge_expired_notes(vault):
+        save_vault(vault_path, password, vault)
 
     if args.command == "interactive":
         print("Entering interactive mode. Type 'exit' or 'quit' to quit.")
