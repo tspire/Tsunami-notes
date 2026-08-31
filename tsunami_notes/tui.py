@@ -104,6 +104,7 @@ class TsunamiTUI(App):
             self.vault["notes"] = []
         self.notes = self.vault["notes"]
         self.current_note_index = None
+        self._list_refresh_id = 0
 
     def compose(self) -> ComposeResult:
         """Create child widgets for the app."""
@@ -115,15 +116,20 @@ class TsunamiTUI(App):
 
     def on_mount(self) -> None:
         """Setup after mounting."""
-        self.refresh_list()
+        self.run_worker(self.refresh_list())
 
-    def refresh_list(self) -> None:
+    async def refresh_list(self) -> None:
         """Refresh the sidebar list of notes."""
+        self._list_refresh_id += 1
         sidebar = self.query_one("#sidebar", ListView)
-        sidebar.clear()
+        await sidebar.clear()
         for i, note in enumerate(self.notes):
             title = note.get("title", "(untitled)")
-            sidebar.append(ListItem(Label(f"{i+1}. {title}"), id=f"note-{i}"))
+            sidebar.append(
+                ListItem(
+                    Label(f"{i+1}. {title}"), id=f"note-{i}-{self._list_refresh_id}"
+                )
+            )
 
         # Select first note if available
         if self.notes:
@@ -157,7 +163,7 @@ class TsunamiTUI(App):
             if result is not None:
                 self.notes.append(result)
                 self.save_vault()
-                self.refresh_list()
+                self.run_worker(self.refresh_list())
 
         self.push_screen(NoteEditorScreen(), check_result)
 
@@ -172,7 +178,7 @@ class TsunamiTUI(App):
             if result is not None:
                 self.notes[self.current_note_index].update(result)
                 self.save_vault()
-                self.refresh_list()
+                self.run_worker(self.refresh_list())
 
         self.push_screen(
             NoteEditorScreen(title=note.get("title", ""), body=note.get("body", "")),
@@ -189,7 +195,7 @@ class TsunamiTUI(App):
                 removed = self.notes.pop(self.current_note_index)
                 self.vault.setdefault("trash", []).append(removed)
                 self.save_vault()
-                self.refresh_list()
+                self.run_worker(self.refresh_list())
 
         self.push_screen(DeleteConfirmScreen(), check_result)
 
