@@ -1,6 +1,6 @@
 # Tsunami Notes — Ubuntu
 
-Private, secure, and encrypted notes app for Ubuntu, written in Python.
+Private, secure, and encrypted notes app for Ubuntu, written in Python with a Rust-based cryptography engine.
 
 ## Features
 
@@ -9,17 +9,22 @@ Private, secure, and encrypted notes app for Ubuntu, written in Python.
 - **Fresh salt & nonce** on every save — re-encrypts the vault from scratch each time.
 - **Atomic writes** — the vault file is replaced atomically to prevent corruption.
 - **Restrictive permissions** — vault file is saved as `0600` (owner read/write only).
-- **Dual Interface** — Simple **CLI** interface for the terminal, or a modern **GUI** with native OS styling.
+- **Multiple Interfaces** — Simple **CLI** for the terminal, a modern **GUI** (tkinter), and a **TUI** (Textual).
 - **GUI Features**:
   - Native OS theming with themed widgets (ttk)
   - Scrollbars for notes list and editor
   - Native application menu
   - Status bar for non-intrusive feedback
+- **Search & Tagging** — organize and quickly find notes.
+- **Trash (Soft Delete)** — recover deleted notes before they are permanently removed.
+- **Duress Passwords & Fake Vaults** — protect against forced access by setting up a decoy vault.
+- **Password Agent** — securely cache your password in the background for a smoother experience.
+- **Audio Feedback** — optional sound effects using `pygame-ce`.
 
 ## Requirements
 
 - Python 3.10+
-- `cryptography >= 41.0.0` (declared in `pyproject.toml`)
+- Rust toolchain (`cargo` / `rustc`) to build the cryptography extension
 - `python3-venv` (Ubuntu package, for `make venv` / `make install`)
 
 ## Development setup (virtualenv)
@@ -36,8 +41,9 @@ Run the app from the virtualenv:
 make run ARGS="list"
 # or
 .venv/bin/tsunami list
-# or launch the GUI
+# or launch the GUI / TUI
 .venv/bin/tsunami gui
+.venv/bin/tsunami tui
 ```
 
 ## Development tools
@@ -84,19 +90,21 @@ You can also build a wheel without installing:
 make build   # → dist/tsunami_notes-0.1.0-py3-none-any.whl
 ```
 
-> **Note:** `make install` needs `python3-venv` and network access to download
-> `cryptography`. On Ubuntu, install the venv module once with
+> **Note:** `make install` needs `python3-venv` and the Rust toolchain to compile
+> the cryptography extension. On Ubuntu, install the venv module with
 > `sudo apt install python3-venv`.
 
 ## Usage
 
-### GUI
+### GUI & TUI
 
 ```bash
 tsunami gui
+# or
+tsunami tui
 ```
 
-Launch the graphical interface with a notes list, editor, native menu, and status bar.
+Launch the graphical interface (Tkinter) or terminal user interface (Textual) for a richer experience.
 
 ### CLI
 
@@ -116,6 +124,17 @@ On subsequent runs you are prompted for the existing master password.
 | `view <index>` | Display a note |
 | `edit <index> [--title T] [--body B]` | Edit a note |
 | `delete <index>` | Delete a note |
+| `search <keyword>` | Search notes by keyword |
+| `export <file>` | Export the decrypted vault to JSON |
+| `import <file>` | Import notes from a JSON file |
+| `trash` | Manage trash (`list`, `restore <index>`, `empty`) |
+| `interactive` | Start an interactive session |
+| `passwd` | Change the master password |
+| `tui` | Launch the Textual TUI |
+| `gui` | Launch the Tkinter GUI |
+| `duress-setup` | Set up a duress PIN/password and fake vault |
+| `agent` | Manage background password agent (`start`, `stop`, `status`) |
+| `unlock` | Cache the master password in the agent for this session |
 
 #### Examples
 
@@ -126,14 +145,11 @@ tsunami add "Shopping list" "Milk, eggs, bread"
 # List all notes
 tsunami list
 
-# View note #1
-tsunami view 1
+# Search for notes containing a keyword
+tsunami search "password"
 
-# Edit the title of note #1
-tsunami edit 1 --title "Grocery list"
-
-# Delete note #1
-tsunami delete 1
+# Launch Textual TUI
+tsunami tui
 
 # Use a custom vault path
 tsunami --vault /path/to/my.vault list
