@@ -14,6 +14,11 @@ from tsunami_notes.notes import (
     load_vault,
     save_vault,
     view_note,
+    list_trash,
+    restore_trash,
+    empty_trash,
+    export_vault,
+    import_vault,
 )
 
 
@@ -131,6 +136,38 @@ class TestNoteOperations(unittest.TestCase):
         add_note(v, "T", "B")
         delete_note(v, 1)
         self.assertEqual(len(v["notes"]), 0)
+        self.assertEqual(len(v["trash"]), 1)
+        self.assertEqual(v["trash"][0]["title"], "T")
+
+    def test_restore_trash(self):
+        v = self._vault()
+        add_note(v, "T", "B")
+        delete_note(v, 1)
+        restore_trash(v, 1)
+        self.assertEqual(len(v["notes"]), 1)
+        self.assertEqual(len(v["trash"]), 0)
+        self.assertEqual(v["notes"][0]["title"], "T")
+
+    def test_empty_trash(self):
+        v = self._vault()
+        add_note(v, "T", "B")
+        delete_note(v, 1)
+        empty_trash(v)
+        self.assertEqual(len(v["trash"]), 0)
+
+    def test_export_import_vault(self):
+        v = self._vault()
+        add_note(v, "Exp", "Body")
+        fd, tmp = tempfile.mkstemp(suffix=".json")
+        os.close(fd)
+        try:
+            export_vault(v, tmp)
+            v2 = self._vault()
+            import_vault(v2, tmp)
+            self.assertEqual(len(v2["notes"]), 1)
+            self.assertEqual(v2["notes"][0]["title"], "Exp")
+        finally:
+            os.remove(tmp)
 
     def test_delete_out_of_range(self, capsys=None):
         v = self._vault()

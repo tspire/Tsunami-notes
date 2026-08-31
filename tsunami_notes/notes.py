@@ -5,9 +5,18 @@ import getpass
 import json
 import os
 import secrets
+import shlex
 import subprocess
 import tempfile
 import sys
+
+try:
+    from rich.console import Console
+    from rich.markdown import Markdown
+
+    RICH_AVAILABLE = True
+except ImportError:
+    RICH_AVAILABLE = False
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
@@ -155,8 +164,15 @@ def view_note(vault: dict, index: int) -> None:
         print(f"Error: note index {index} out of range (1–{len(notes)}).")
         return
     note = notes[index - 1]
-    print(f"Title : {note.get('title', '')}")
-    print(f"Body  :\n{note.get('body', '')}")
+    title = note.get("title", "")
+    body = note.get("body", "")
+    print(f"Title : {title}")
+    print("Body  :")
+    if RICH_AVAILABLE:
+        console = Console()
+        console.print(Markdown(body))
+    else:
+        print(body)
 
 
 def edit_note(
@@ -182,13 +198,75 @@ def edit_note(
 
 
 def delete_note(vault: dict, index: int) -> bool:
-    """Remove the note at *index*; returns success."""
+    """Remove the note at *index* and move it to trash; returns success."""
     notes = vault.get("notes", [])
     if not 1 <= index <= len(notes):
         print(f"Error: note index {index} out of range.")
         return False
     removed = notes.pop(index - 1)
-    print(f"Note '{removed.get('title', '')}' deleted.")
+    vault.setdefault("trash", []).append(removed)
+    print(f"Note '{removed.get('title', '')}' moved to trash.")
+    return True
+
+
+def list_trash(vault: dict) -> None:
+    """Print the title of every note in trash."""
+    trash = vault.get("trash", [])
+    if not trash:
+        print("Trash is empty.")
+        return
+    for idx, note in enumerate(trash, start=1):
+        title = note.get("title", "(untitled)")
+        print(f"  [{idx}] {title}")
+
+
+def restore_trash(vault: dict, index: int) -> bool:
+    """Restore the note at *index* from trash to notes."""
+    trash = vault.get("trash", [])
+    if not 1 <= index <= len(trash):
+        print(f"Error: trash index {index} out of range.")
+        return False
+    restored = trash.pop(index - 1)
+    vault.setdefault("notes", []).append(restored)
+    print(f"Note '{restored.get('title', '')}' restored.")
+    return True
+
+
+def empty_trash(vault: dict) -> bool:
+    """Permanently delete all notes in trash."""
+    trash = vault.get("trash", [])
+    if not trash:
+        print("Trash is already empty.")
+        return False
+    count = len(trash)
+    vault["trash"] = []
+    print(f"Emptied {count} notes from trash.")
+    return True
+
+
+def export_vault(vault: dict, path: str) -> None:
+    """Export the decrypted vault to a JSON file."""
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(vault, f, indent=2, ensure_ascii=False)
+    print(f"Vault exported to {path}.")
+
+
+def import_vault(vault: dict, path: str) -> bool:
+    """Import notes from a JSON file and append them to the vault."""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        print(f"Failed to read {path}: {e}")
+        return False
+
+    imported_notes = data.get("notes", [])
+    if not imported_notes:
+        print("No notes found in the import file.")
+        return False
+
+    vault.setdefault("notes", []).extend(imported_notes)
+    print(f"Imported {len(imported_notes)} notes from {path}.")
     return True
 
 
@@ -250,6 +328,23 @@ def build_parser() -> argparse.ArgumentParser:
     search_p = sub.add_parser("search", help="Search notes by keyword.")
     search_p.add_argument("query", help="Keyword to search for.")
 
+    export_p = sub.add_parser("export", help="Export the decrypted vault to JSON.")
+    export_p.add_argument("file", help="Path to export the JSON file.")
+
+    import_p = sub.add_parser("import", help="Import notes from a JSON file.")
+    import_p.add_argument("file", help="Path to the JSON file to import.")
+
+    trash_p = sub.add_parser("trash", help="Manage trash.")
+    trash_sub = trash_p.add_subparsers(dest="trash_cmd", required=False)
+    trash_sub.add_parser("list", help="List items in trash.")
+
+    trash_restore_p = trash_sub.add_parser("restore", help="Restore item from trash.")
+    trash_restore_p.add_argument("index", type=int, help="1-based index in trash.")
+
+    trash_sub.add_parser("empty", help="Empty the trash.")
+
+    sub.add_parser("interactive", help="Start an interactive session.")
+
     sub.add_parser("passwd", help="Change the master password.")
 
     return parser
@@ -269,22 +364,8 @@ def _prompt_password(confirm: bool = False, prompt: str = "Master password: ") -
 
 
 # pylint: disable=too-many-branches
-def main(argv: list[str] | None = None) -> int:
-    """Run the CLI and return the process exit code."""
-    parser = build_parser()
-    args = parser.parse_args(argv)
-
-    vault_path = args.vault
-    is_new_vault = not os.path.exists(vault_path)
-
-    password = _prompt_password(confirm=is_new_vault)
-
-    try:
-        vault = load_vault(vault_path, password)
-    except ValueError as exc:
-        print(f"Error: {exc}")
-        return 1
-
+def _run_command(args, vault, password) -> tuple[bool, str]:
+    """Execute the command specified in args. Returns (modified, password)."""
     modified = False
 
     if args.command == "list":
@@ -320,12 +401,72 @@ def main(argv: list[str] | None = None) -> int:
     elif args.command == "search":
         search_notes(vault, args.query)
 
+    elif args.command == "export":
+        export_vault(vault, args.file)
+
+    elif args.command == "import":
+        modified = import_vault(vault, args.file)
+
+    elif args.command == "trash":
+        if args.trash_cmd == "restore":
+            modified = restore_trash(vault, args.index)
+        elif args.trash_cmd == "empty":
+            modified = empty_trash(vault)
+        else:
+            list_trash(vault)
+
     elif args.command == "passwd":
         password = _prompt_password(confirm=True, prompt="New master password: ")
         modified = True
 
-    if modified:
-        save_vault(vault_path, password, vault)
+    return modified, password
+
+
+# pylint: disable=too-many-branches
+def main(argv: list[str] | None = None) -> int:
+    """Run the CLI and return the process exit code."""
+    parser = build_parser()
+    args = parser.parse_args(argv)
+
+    vault_path = args.vault
+    is_new_vault = not os.path.exists(vault_path)
+
+    password = _prompt_password(confirm=is_new_vault)
+
+    try:
+        vault = load_vault(vault_path, password)
+    except ValueError as exc:
+        print(f"Error: {exc}")
+        return 1
+
+    if args.command == "interactive":
+        print("Entering interactive mode. Type 'exit' or 'quit' to quit.")
+        while True:
+            try:
+                line = input("> ").strip()
+                if not line:
+                    continue
+                if line in ("exit", "quit"):
+                    break
+
+                parts = shlex.split(line)
+                try:
+                    iargs = parser.parse_args(parts)
+                    if iargs.command == "interactive":
+                        print("Already in interactive mode.")
+                        continue
+                    modified, password = _run_command(iargs, vault, password)
+                    if modified:
+                        save_vault(vault_path, password, vault)
+                except SystemExit:
+                    pass
+            except EOFError:
+                print()
+                break
+    else:
+        modified, password = _run_command(args, vault, password)
+        if modified:
+            save_vault(vault_path, password, vault)
 
     return 0
 
