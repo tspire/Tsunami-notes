@@ -15,7 +15,7 @@ from rich.console import Console
 from rich.live import Live
 from rich.markdown import Markdown
 from rich.panel import Panel
-from rich.prompt import Prompt
+from rich.prompt import Confirm, Prompt
 from rich.table import Table
 from rich.text import Text
 
@@ -83,6 +83,61 @@ def save_vault(path: str, password: str, vault: dict) -> None:
     """Encrypt and persist *vault* to *path*."""
     with console.status("Encrypting vault...", spinner="dots"):
         crypto.save_vault(path, password, vault)
+
+
+def set_duress_password(vault_path: str, password: str) -> None:
+    """Set the duress password and save its hash to a .meta file."""
+    salt = os.urandom(32)
+    key = crypto.derive_key(password, salt)
+    meta_path = vault_path + ".meta"
+    with open(meta_path, "w", encoding="utf-8") as f:
+        json.dump(
+            {
+                "duress_salt": salt.hex(),
+                "duress_hash": key.hex(),
+            },
+            f,
+        )
+
+
+def clear_duress_password(vault_path: str) -> None:
+    """Remove the duress password metadata."""
+    meta_path = vault_path + ".meta"
+    if os.path.exists(meta_path):
+        os.remove(meta_path)
+
+
+def check_duress_password(vault_path: str, password: str) -> bool:
+    """Check if the provided password is the duress password."""
+    meta_path = vault_path + ".meta"
+    if not os.path.exists(meta_path):
+        return False
+    try:
+        with open(meta_path, "r", encoding="utf-8") as f:
+            meta = json.load(f)
+        salt = bytes.fromhex(meta["duress_salt"])
+        expected_hash = bytes.fromhex(meta["duress_hash"])
+        actual_hash = crypto.derive_key(password, salt)
+        return actual_hash == expected_hash
+    except Exception:  # pylint: disable=broad-except
+        return False
+
+
+def handle_duress(vault_path: str) -> None:
+    """Destroy the vault securely by overwriting with random data."""
+    paths = [vault_path, vault_path + ".meta", vault_path + ".fake"]
+    for p in paths:
+        if os.path.exists(p):
+            size = os.path.getsize(p)
+            try:
+                with open(p, "wb") as f:
+                    f.write(os.urandom(size))
+            except OSError:
+                pass
+            try:
+                os.remove(p)
+            except OSError:
+                pass
 
 
 # ---------------------------------------------------------------------------
@@ -702,6 +757,11 @@ def _run_command(args, vault, vault_path, password) -> tuple[bool, str]:
 
     elif args.command == "passwd":
         password = _prompt_password(confirm=True, prompt="New master password: ")
+        if Confirm.ask("Set a duress/self-destruct password?"):
+            duress = _prompt_password(confirm=True, prompt="New duress password: ")
+            set_duress_password(vault_path, duress)
+        else:
+            clear_duress_password(vault_path)
         play_fullscreen_anim("passwd", "Master password changed.")
         modified = True
 
@@ -797,11 +857,23 @@ def main(argv: list[str] | None = None) -> int:
 
     if not password:
         password = _prompt_password(confirm=is_new_vault)
+        if is_new_vault:
+            if Confirm.ask("Set a duress/self-destruct password?"):
+                duress = _prompt_password(confirm=True, prompt="New duress password: ")
+                set_duress_password(vault_path, duress)
 
     try:
         vault = load_vault(vault_path, password)
         play_sound("zelda_secret")
     except ValueError as exc:
+        if check_duress_password(vault_path, password):
+            handle_duress(vault_path)
+            play_sound("mgs_alert")
+            console.print(
+                "[bold red]Duress password entered. Vault destroyed.[/bold red]"
+            )
+            return 1
+
         fake_vault_path = vault_path + ".fake"
         if os.path.exists(fake_vault_path):
             try:

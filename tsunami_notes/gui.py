@@ -1,16 +1,18 @@
 """GUI implementation for Tsunami Notes."""
 
-# pylint: disable=import-error
+# pylint: disable=import-error,import-outside-toplevel
 
 import os
 import json
-import tkinter as tk  # pylint: disable=import-error
+import time
+import re
+import tkinter as tk  # pylint: disable=import-error,import-outside-toplevel
 from tkinter import (
     ttk,
     messagebox,
     simpledialog,
     filedialog,
-)  # pylint: disable=import-error
+)  # pylint: disable=import-error,import-outside-toplevel
 
 from .audio import play_sound
 
@@ -34,11 +36,15 @@ class TsunamiGUI(tk.Tk):
         self.password = password
         self.save_vault_fn = save_vault_fn
         self.current_index = None
+        self.filtered_indices = []
         self.listbox = None
         self.title_entry = None
         self.body_text = None
         self.status_var = tk.StringVar()
         self.keyboard_sound_enabled = tk.BooleanVar(value=False)
+        self.focus_mode_enabled = tk.BooleanVar(value=False)
+        self.typing_timer = None
+        self.is_typing = False
 
         self.title("Tsunami Notes")
         self.geometry("800x600")
@@ -47,7 +53,35 @@ class TsunamiGUI(tk.Tk):
         self._refresh_list()
         self.status_var.set("Ready")
 
-    def _build_ui(self):
+        self.last_activity = time.time()
+        self.bind_all("<Any-KeyPress>", self._reset_timer)
+        self.bind_all("<Any-Button>", self._reset_timer)
+        self.bind_all("<Motion>", self._reset_timer)
+        self.after(10000, self._check_inactivity)
+
+    def _reset_timer(self, event=None):  # pylint: disable=unused-argument
+        self.last_activity = time.time()
+
+    def _check_inactivity(self):
+        if time.time() - self.last_activity > 300:
+            self.withdraw()
+            from .audio import (
+                stop_focus_mode,
+            )  # pylint: disable=import-outside-toplevel
+
+            stop_focus_mode()
+            pwd = simpledialog.askstring(
+                "Locked", "Session locked. Enter master password:", show="*"
+            )
+            if pwd == self.password:
+                self.deiconify()
+                self.last_activity = time.time()
+            else:
+                self.destroy()
+                return
+        self.after(10000, self._check_inactivity)
+
+    def _build_ui(self):  # pylint: disable=too-many-statements
         """Construct the UI widgets."""
         # Menu Bar
         menubar = tk.Menu(self)
@@ -57,6 +91,11 @@ class TsunamiGUI(tk.Tk):
         menubar.add_cascade(label="Settings", menu=settings_menu)
         settings_menu.add_checkbutton(
             label="Keyboard Sounds", variable=self.keyboard_sound_enabled
+        )
+        settings_menu.add_checkbutton(
+            label="Focus Mode",
+            variable=self.focus_mode_enabled,
+            command=self._on_focus_mode_toggle,
         )
         settings_menu.add_separator()
         settings_menu.add_command(label="list", command=self._cmd_list)
@@ -83,6 +122,12 @@ class TsunamiGUI(tk.Tk):
 
         btn_save = ttk.Button(toolbar, text="Save Note", command=self.save_current_note)
         btn_save.pack(side=tk.LEFT, padx=2, pady=2)
+
+        ttk.Label(toolbar, text="Search:").pack(side=tk.LEFT, padx=(15, 2))
+        self.search_var = tk.StringVar()
+        self.search_var.trace_add("write", lambda *args: self._refresh_list())
+        search_entry = ttk.Entry(toolbar, textvariable=self.search_var)
+        search_entry.pack(side=tk.LEFT, padx=2, pady=2)
 
         # PanedWindow for main content
         paned = ttk.PanedWindow(self, orient=tk.HORIZONTAL)
@@ -127,9 +172,9 @@ class TsunamiGUI(tk.Tk):
         self.body_text.bind("<KeyPress>", self._on_key_press)
         self.title_entry.bind("<KeyPress>", self._on_key_press)
 
-    def _on_key_press(self, event):  # pylint: disable=unused-argument
-        if self.keyboard_sound_enabled.get():
-            play_sound("keyboard_click")
+        self.body_text.bind("<KeyRelease>", self._highlight_markdown)
+        self.body_text.tag_configure("bold", font=("Consolas", 11, "bold"))
+        self.body_text.tag_configure("italic", font=("Consolas", 11, "italic"))
 
         # Status Bar
         status_bar = ttk.Label(
@@ -137,11 +182,68 @@ class TsunamiGUI(tk.Tk):
         )
         status_bar.pack(side=tk.BOTTOM, fill=tk.X)
 
+    def _on_focus_mode_toggle(self):
+        from .audio import (
+            stop_focus_mode,
+        )  # pylint: disable=import-outside-toplevel  # pylint: disable=import-outside-toplevel
+
+        if not self.focus_mode_enabled.get():
+            stop_focus_mode()
+            self.is_typing = False
+            if self.typing_timer:
+                self.after_cancel(self.typing_timer)
+                self.typing_timer = None
+
+    def _highlight_markdown(self, event=None):  # pylint: disable=unused-argument
+        self.body_text.tag_remove("bold", "1.0", tk.END)
+        self.body_text.tag_remove("italic", "1.0", tk.END)
+
+        text = self.body_text.get("1.0", "end-1c")
+        for match in re.finditer(r"\*\*(.*?)\*\*", text):
+            start_idx = f"1.0+{match.start()}c"
+            end_idx = f"1.0+{match.end()}c"
+            self.body_text.tag_add("bold", start_idx, end_idx)
+
+        for match in re.finditer(r"(?<!\*)\*(?!\*)(.*?)(?<!\*)\*(?!\*)", text):
+            start_idx = f"1.0+{match.start()}c"
+            end_idx = f"1.0+{match.end()}c"
+            self.body_text.tag_add("italic", start_idx, end_idx)
+
+    def _on_key_press(self, event):  # pylint: disable=unused-argument
+        if self.keyboard_sound_enabled.get():
+            play_sound("keyboard_click")
+
+        if self.focus_mode_enabled.get():
+            from .audio import (
+                start_focus_mode,
+            )  # pylint: disable=import-outside-toplevel
+
+            if not self.is_typing:
+                self.is_typing = True
+                start_focus_mode("default")
+            if self.typing_timer:
+                self.after_cancel(self.typing_timer)
+            self.typing_timer = self.after(3000, self._stop_typing)
+
+    def _stop_typing(self):
+        from .audio import (
+            stop_focus_mode,
+        )  # pylint: disable=import-outside-toplevel  # pylint: disable=import-outside-toplevel
+
+        self.is_typing = False
+        stop_focus_mode()
+
     def _refresh_list(self):
         """Refresh the list of notes in the Listbox."""
         self.listbox.delete(0, tk.END)
+        self.filtered_indices = []
+        query = self.search_var.get().lower() if hasattr(self, "search_var") else ""
         for i, note in enumerate(self.vault.get("notes", [])):
-            self.listbox.insert(tk.END, f"{i+1}. {note.get('title', '(untitled)')}")
+            title = note.get("title", "(untitled)")
+            body = note.get("body", "")
+            if query in title.lower() or query in body.lower():
+                self.filtered_indices.append(i)
+                self.listbox.insert(tk.END, f"{i+1}. {title}")
 
     def on_select(self, event):  # pylint: disable=unused-argument
         """Handle listbox selection."""
@@ -149,20 +251,22 @@ class TsunamiGUI(tk.Tk):
         if not selection:
             return
 
-        index = selection[0]
-        self.current_index = index
-        note = self.vault["notes"][index]
+        list_idx = selection[0]
+        self.current_index = self.filtered_indices[list_idx]
+        note = self.vault["notes"][self.current_index]
 
         self.title_entry.delete(0, tk.END)
         self.title_entry.insert(0, note.get("title", ""))
 
         self.body_text.delete("1.0", tk.END)
         self.body_text.insert("1.0", note.get("body", ""))
+        self._highlight_markdown()
 
     def add_note(self):
         """Prompt and add a new note."""
         title = simpledialog.askstring("New Note", "Enter note title:")
         if title is not None:
+            self.search_var.set("")
             self.vault.setdefault("notes", []).append({"title": title, "body": ""})
             self._save_vault()
             self._refresh_list()
@@ -170,7 +274,7 @@ class TsunamiGUI(tk.Tk):
             last_index = self.listbox.size() - 1
             self.listbox.selection_set(last_index)
             # manually trigger on_select behavior to avoid reliance on event loop
-            self.current_index = last_index
+            self.current_index = self.filtered_indices[last_index]
             self.title_entry.delete(0, tk.END)
             self.title_entry.insert(0, title)
             self.body_text.delete("1.0", tk.END)
@@ -204,8 +308,13 @@ class TsunamiGUI(tk.Tk):
             note["title"] = new_title
             note["body"] = new_body
             self._save_vault()
+
+            # preserve selection index in listbox if possible
+            selection = self.listbox.curselection()
             self._refresh_list()
-            self.listbox.selection_set(self.current_index)
+            if selection:
+                self.listbox.selection_set(selection[0])
+
             self.status_var.set("Note saved.")
 
     def _save_vault(self):
@@ -225,6 +334,7 @@ class TsunamiGUI(tk.Tk):
             idx = int(idx_str) - 1
             notes = self.vault.get("notes", [])
             if 0 <= idx < len(notes):
+                self.search_var.set("")
                 self.listbox.selection_clear(0, tk.END)
                 self.listbox.selection_set(idx)
                 self.current_index = idx
@@ -233,6 +343,7 @@ class TsunamiGUI(tk.Tk):
                 self.title_entry.insert(0, note.get("title", ""))
                 self.body_text.delete("1.0", tk.END)
                 self.body_text.insert("1.0", note.get("body", ""))
+                self._highlight_markdown()
             else:
                 self._show_error("Error", "Invalid index.")
 
@@ -244,6 +355,7 @@ class TsunamiGUI(tk.Tk):
             idx = int(idx_str) - 1
             notes = self.vault.get("notes", [])
             if 0 <= idx < len(notes):
+                self.search_var.set("")
                 self.listbox.selection_clear(0, tk.END)
                 self.listbox.selection_set(idx)
                 self.current_index = idx
@@ -252,6 +364,7 @@ class TsunamiGUI(tk.Tk):
                 self.title_entry.insert(0, note.get("title", ""))
                 self.body_text.delete("1.0", tk.END)
                 self.body_text.insert("1.0", note.get("body", ""))
+                self._highlight_markdown()
             else:
                 self._show_error("Error", "Invalid index.")
 
@@ -267,10 +380,13 @@ class TsunamiGUI(tk.Tk):
                     trash = self.vault.setdefault("trash", [])
                     trash.append(notes.pop(idx))
                     self._save_vault()
+                    if self.current_index == idx:
+                        self.current_index = None
+                        self.title_entry.delete(0, tk.END)
+                        self.body_text.delete("1.0", tk.END)
+                    elif self.current_index is not None and self.current_index > idx:
+                        self.current_index -= 1
                     self._refresh_list()
-                    self.current_index = None
-                    self.title_entry.delete(0, tk.END)
-                    self.body_text.delete("1.0", tk.END)
             else:
                 self._show_error("Error", "Invalid index.")
 

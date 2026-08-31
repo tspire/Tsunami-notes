@@ -230,5 +230,42 @@ class TestNoteOperations(unittest.TestCase):
             self.assertIn("No matching notes found", mock_stdout.getvalue())
 
 
+class TestDuress(unittest.TestCase):
+    def setUp(self):
+        fd, self.tmp = tempfile.mkstemp(suffix=".vault")
+        os.close(fd)
+        os.remove(self.tmp)
+
+    def tearDown(self):
+        for p in [self.tmp, self.tmp + ".meta", self.tmp + ".fake"]:
+            if os.path.exists(p):
+                os.remove(p)
+
+    def test_duress_flow(self):
+        from tsunami_notes.notes import (
+            save_vault,
+            set_duress_password,
+            check_duress_password,
+            handle_duress,
+        )
+
+        vault = {"notes": [{"title": "secret", "body": "data"}]}
+        save_vault(self.tmp, "main_pw", vault)
+
+        # Set duress password
+        set_duress_password(self.tmp, "duress_pw")
+
+        # Check passwords
+        self.assertFalse(check_duress_password(self.tmp, "main_pw"))
+        self.assertFalse(check_duress_password(self.tmp, "wrong_pw"))
+        self.assertTrue(check_duress_password(self.tmp, "duress_pw"))
+
+        # Handle duress
+        handle_duress(self.tmp)
+
+        self.assertFalse(os.path.exists(self.tmp))
+        self.assertFalse(os.path.exists(self.tmp + ".meta"))
+
+
 if __name__ == "__main__":
     unittest.main()

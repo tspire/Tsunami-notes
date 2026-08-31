@@ -1,7 +1,9 @@
 """Textual TUI for Tsunami Notes."""
 
+import time
 from textual.app import App, ComposeResult
 from textual.screen import ModalScreen
+from textual import events
 from textual.containers import Horizontal, Vertical
 from textual.widgets import (
     Header,
@@ -16,10 +18,35 @@ from textual.widgets import (
 )
 
 
+class PasswordScreen(ModalScreen[bool]):
+    """Screen to prompt for password when locked."""
+
+    def compose(self) -> ComposeResult:
+        """Create child widgets."""
+        with Vertical(id="dialog"):
+            yield Label("Session locked. Enter master password:")
+            yield Input(password=True, id="pwd_input")
+            with Horizontal():
+                yield Button("Unlock", variant="success", id="unlock")
+                yield Button("Quit", variant="error", id="quit")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Handle button presses."""
+        if event.button.id == "unlock":
+            pwd = self.query_one("#pwd_input", Input).value
+            if pwd == getattr(self.app, "password", ""):
+                self.dismiss(True)
+            else:
+                self.query_one("#pwd_input", Input).value = ""
+        else:
+            self.app.exit(0)
+
+
 class DeleteConfirmScreen(ModalScreen[bool]):
     """Screen to confirm deletion."""
 
     def compose(self) -> ComposeResult:
+        """Create child widgets."""
         with Vertical(id="dialog"):
             yield Label("Are you sure you want to delete this note?")
             with Horizontal():
@@ -27,7 +54,7 @@ class DeleteConfirmScreen(ModalScreen[bool]):
                 yield Button("No", variant="primary", id="no")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        """Handle button presses in the dialog."""
+        """Handle button presses."""
         if event.button.id == "yes":
             self.dismiss(True)
         else:
@@ -43,6 +70,7 @@ class NoteEditorScreen(ModalScreen[dict]):
         self._initial_body = body
 
     def compose(self) -> ComposeResult:
+        """Create child widgets."""
         with Vertical(id="editor"):
             yield Label("Title:")
             yield Input(self._initial_title, id="title_input")
@@ -53,7 +81,7 @@ class NoteEditorScreen(ModalScreen[dict]):
                 yield Button("Cancel", variant="error", id="cancel")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        """Handle button presses in the editor."""
+        """Handle button presses."""
         if event.button.id == "save":
             title = self.query_one("#title_input", Input).value
             body = self.query_one("#body_input", TextArea).text
@@ -63,6 +91,7 @@ class NoteEditorScreen(ModalScreen[dict]):
 
 
 class TsunamiTUI(App):
+    # pylint: disable=too-many-instance-attributes
     """A Textual app for Tsunami Notes."""
 
     CSS = """
@@ -105,9 +134,10 @@ class TsunamiTUI(App):
         self.notes = self.vault["notes"]
         self.current_note_index = None
         self._list_refresh_id = 0
+        self.last_activity = 0
 
     def compose(self) -> ComposeResult:
-        """Create child widgets for the app."""
+        """Create child widgets."""
         yield Header()
         with Horizontal():
             yield ListView(id="sidebar")
@@ -116,7 +146,28 @@ class TsunamiTUI(App):
 
     def on_mount(self) -> None:
         """Setup after mounting."""
+        self.last_activity = time.time()
+        self.set_interval(10, self.check_inactivity)
         self.run_worker(self.refresh_list())
+
+    def check_inactivity(self) -> None:
+        """Check if the app should be locked."""
+        if time.time() - self.last_activity > 300:
+            if not isinstance(self.screen, PasswordScreen):
+                self.push_screen(PasswordScreen(), self.unlock_result)
+            self.last_activity = time.time()
+
+    def unlock_result(self, unlocked: bool) -> None:
+        """Handle unlock result."""
+        if unlocked:
+            self.last_activity = time.time()
+        else:
+            self.exit()
+
+    async def on_event(self, event: events.Event) -> None:
+        if isinstance(event, (events.Key, events.MouseMove, events.MouseDown)):
+            self.last_activity = time.time()
+        await super().on_event(event)
 
     async def refresh_list(self) -> None:
         """Refresh the sidebar list of notes."""
