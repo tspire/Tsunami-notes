@@ -12,8 +12,10 @@ dependencies = [
     "cryptography>=41.0.0",
     "rich>=13.0.0",
     "textual>=0.40.0",
-    "pygame>=2.0.0",
 ]
+
+[project.optional-dependencies]
+sound = ["pygame-ce>=2.5.0"]
 
 [project.scripts]
 tsunami = "tsunami_notes.notes:main"
