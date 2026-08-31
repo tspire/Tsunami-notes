@@ -14,6 +14,11 @@ from tsunami_notes.notes import (
     load_vault,
     save_vault,
     view_note,
+    list_trash,
+    restore_trash,
+    empty_trash,
+    export_vault,
+    import_vault,
 )
 
 
@@ -131,6 +136,38 @@ class TestNoteOperations(unittest.TestCase):
         add_note(v, "T", "B")
         delete_note(v, 1)
         self.assertEqual(len(v["notes"]), 0)
+        self.assertEqual(len(v["trash"]), 1)
+        self.assertEqual(v["trash"][0]["title"], "T")
+
+    def test_restore_trash(self):
+        v = self._vault()
+        add_note(v, "T", "B")
+        delete_note(v, 1)
+        restore_trash(v, 1)
+        self.assertEqual(len(v["notes"]), 1)
+        self.assertEqual(len(v["trash"]), 0)
+        self.assertEqual(v["notes"][0]["title"], "T")
+
+    def test_empty_trash(self):
+        v = self._vault()
+        add_note(v, "T", "B")
+        delete_note(v, 1)
+        empty_trash(v)
+        self.assertEqual(len(v["trash"]), 0)
+
+    def test_export_import_vault(self):
+        v = self._vault()
+        add_note(v, "Exp", "Body")
+        fd, tmp = tempfile.mkstemp(suffix=".json")
+        os.close(fd)
+        try:
+            export_vault(v, tmp)
+            v2 = self._vault()
+            import_vault(v2, tmp)
+            self.assertEqual(len(v2["notes"]), 1)
+            self.assertEqual(v2["notes"][0]["title"], "Exp")
+        finally:
+            os.remove(tmp)
 
     def test_delete_out_of_range(self, capsys=None):
         v = self._vault()
@@ -141,6 +178,41 @@ class TestNoteOperations(unittest.TestCase):
         v = self._vault()
         # should not raise
         edit_note(v, 99, title="x", body=None)
+
+    def test_add_note_with_tags(self):
+        v = self._vault()
+        add_note(v, "Title", "Body", ["tag1", "tag2"])
+        self.assertEqual(len(v["notes"]), 1)
+        self.assertEqual(v["notes"][0]["tags"], ["tag1", "tag2"])
+
+    def test_edit_note_tags(self):
+        v = self._vault()
+        add_note(v, "Title", "Body", ["tag1"])
+        edit_note(v, 1, title=None, body=None, tags=["tag2"])
+        self.assertEqual(v["notes"][0]["tags"], ["tag2"])
+
+    def test_search_notes(self):
+        from tsunami_notes.notes import search_notes
+        from unittest.mock import patch
+        import io
+
+        v = self._vault()
+        add_note(v, "Secret meeting", "Meet at noon", [])
+
+        # Test finding in title
+        with patch("sys.stdout", new_callable=io.StringIO) as mock_stdout:
+            search_notes(v, "meeting")
+            self.assertIn("Secret meeting", mock_stdout.getvalue())
+
+        # Test finding in body
+        with patch("sys.stdout", new_callable=io.StringIO) as mock_stdout:
+            search_notes(v, "noon")
+            self.assertIn("Secret meeting", mock_stdout.getvalue())
+
+        # Test not finding
+        with patch("sys.stdout", new_callable=io.StringIO) as mock_stdout:
+            search_notes(v, "xyz")
+            self.assertIn("No matching notes found", mock_stdout.getvalue())
 
 
 if __name__ == "__main__":
