@@ -1,7 +1,9 @@
 """GUI implementation for Tsunami Notes."""
 
+import os
+import json
 import tkinter as tk  # pylint: disable=import-error
-from tkinter import messagebox, simpledialog  # pylint: disable=import-error
+from tkinter import messagebox, simpledialog, filedialog  # pylint: disable=import-error
 
 
 class TsunamiGUI(tk.Tk):
@@ -39,6 +41,26 @@ class TsunamiGUI(tk.Tk):
 
         btn_save = tk.Button(toolbar, text="Save Note", command=self.save_current_note)
         btn_save.pack(side=tk.LEFT, padx=2, pady=2)
+
+        self.btn_settings = tk.Menubutton(toolbar, text="Settings", relief=tk.RAISED)
+        self.btn_settings.pack(side=tk.LEFT, padx=2, pady=2)
+
+        self.settings_menu = tk.Menu(self.btn_settings, tearoff=0)
+        self.btn_settings.config(menu=self.settings_menu)
+
+        self.settings_menu.add_command(label="list", command=self._cmd_list)
+        self.settings_menu.add_command(label="add", command=self._cmd_add)
+        self.settings_menu.add_command(label="view", command=self._cmd_view)
+        self.settings_menu.add_command(label="edit", command=self._cmd_edit)
+        self.settings_menu.add_command(label="delete", command=self._cmd_delete)
+        self.settings_menu.add_command(label="search", command=self._cmd_search)
+        self.settings_menu.add_command(label="export", command=self._cmd_export)
+        self.settings_menu.add_command(label="import", command=self._cmd_import)
+        self.settings_menu.add_command(label="trash", command=self._cmd_trash)
+        self.settings_menu.add_command(
+            label="interactive", command=self._cmd_interactive
+        )
+        self.settings_menu.add_command(label="passwd", command=self._cmd_passwd)
 
         paned = tk.PanedWindow(self, orient=tk.HORIZONTAL)
         paned.pack(fill=tk.BOTH, expand=True)
@@ -127,6 +149,145 @@ class TsunamiGUI(tk.Tk):
     def _save_vault(self):
         """Save the vault securely."""
         self.save_vault_fn(self.vault_path, self.password, self.vault)
+
+    def _cmd_list(self):
+        self._refresh_list()
+        messagebox.showinfo("List", f"Loaded {len(self.vault.get('notes', []))} notes.")
+
+    def _cmd_add(self):
+        self.add_note()
+
+    def _cmd_view(self):
+        idx_str = simpledialog.askstring("View Note", "Enter note index (1-based):")
+        if idx_str and idx_str.isdigit():
+            idx = int(idx_str) - 1
+            notes = self.vault.get("notes", [])
+            if 0 <= idx < len(notes):
+                self.listbox.selection_clear(0, tk.END)
+                self.listbox.selection_set(idx)
+                self.current_index = idx
+                note = notes[idx]
+                self.title_entry.delete(0, tk.END)
+                self.title_entry.insert(0, note.get("title", ""))
+                self.body_text.delete("1.0", tk.END)
+                self.body_text.insert("1.0", note.get("body", ""))
+            else:
+                messagebox.showerror("Error", "Invalid index.")
+
+    def _cmd_edit(self):
+        self._cmd_view()
+
+    def _cmd_delete(self):
+        idx_str = simpledialog.askstring("Delete Note", "Enter note index (1-based):")
+        if idx_str and idx_str.isdigit():
+            idx = int(idx_str) - 1
+            notes = self.vault.get("notes", [])
+            if 0 <= idx < len(notes):
+                if messagebox.askyesno(
+                    "Confirm Delete", "Are you sure you want to delete this note?"
+                ):
+                    trash = self.vault.setdefault("trash", [])
+                    trash.append(notes.pop(idx))
+                    self._save_vault()
+                    self._refresh_list()
+                    self.current_index = None
+                    self.title_entry.delete(0, tk.END)
+                    self.body_text.delete("1.0", tk.END)
+            else:
+                messagebox.showerror("Error", "Invalid index.")
+
+    def _cmd_search(self):
+        query = simpledialog.askstring("Search", "Enter keyword:")
+        if query:
+            results = []
+            notes = self.vault.get("notes", [])
+            for idx, note in enumerate(notes, start=1):
+                title = note.get("title", "")
+                body = note.get("body", "")
+                if query.lower() in title.lower() or query.lower() in body.lower():
+                    results.append(f"[{idx}] {title}")
+            if results:
+                messagebox.showinfo("Search Results", "\n".join(results))
+            else:
+                messagebox.showinfo("Search Results", "No matches found.")
+
+    def _cmd_export(self):
+        path = filedialog.asksaveasfilename(
+            title="Export to JSON", defaultextension=".json"
+        )
+        if path:
+            try:
+                fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    json.dump(self.vault, f, indent=2, ensure_ascii=False)
+                messagebox.showinfo("Export", f"Vault exported to {path}.")
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                messagebox.showerror("Export Error", str(e))
+
+    def _cmd_import(self):
+        path = filedialog.askopenfilename(
+            title="Import JSON", filetypes=[("JSON Files", "*.json"), ("All", "*.*")]
+        )
+        if path:
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                imported_notes = data.get("notes", [])
+                if not imported_notes:
+                    messagebox.showinfo("Import", "No notes found in the import file.")
+                    return
+                self.vault.setdefault("notes", []).extend(imported_notes)
+                self._save_vault()
+                self._refresh_list()
+                messagebox.showinfo("Import", f"Imported {len(imported_notes)} notes.")
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                messagebox.showerror("Import Error", f"Failed to read {path}: {e}")
+
+    def _cmd_trash(self):
+        trash = self.vault.get("trash", [])
+        if not trash:
+            messagebox.showinfo("Trash", "Trash is empty.")
+            return
+
+        msg = (
+            f"{len(trash)} items in trash.\n"
+            "Enter 'empty' to empty, or index (1-based) to restore:"
+        )
+        action = simpledialog.askstring("Trash", msg)
+        if action == "empty":
+            self.vault["trash"] = []
+            self._save_vault()
+            messagebox.showinfo("Trash", "Trash emptied.")
+        elif action and action.isdigit():
+            idx = int(action) - 1
+            if 0 <= idx < len(trash):
+                notes = self.vault.setdefault("notes", [])
+                notes.append(trash.pop(idx))
+                self._save_vault()
+                self._refresh_list()
+                messagebox.showinfo("Trash", "Item restored.")
+            else:
+                messagebox.showerror("Error", "Invalid index.")
+
+    def _cmd_interactive(self):
+        messagebox.showinfo(
+            "Interactive", "Please run 'tsunami interactive' in your terminal."
+        )
+
+    def _cmd_passwd(self):
+        new_pwd = simpledialog.askstring(
+            "Password", "Enter new master password:", show="*"
+        )
+        if new_pwd:
+            confirm = simpledialog.askstring(
+                "Password", "Confirm new master password:", show="*"
+            )
+            if new_pwd == confirm:
+                self.password = new_pwd
+                self._save_vault()
+                messagebox.showinfo("Password", "Master password changed successfully.")
+            else:
+                messagebox.showerror("Error", "Passwords do not match.")
 
 
 def run_gui(vault, vault_path, password, save_vault_fn):
