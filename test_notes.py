@@ -142,6 +142,47 @@ class TestNoteOperations(unittest.TestCase):
         # should not raise
         edit_note(v, 99, title="x", body=None)
 
+    def test_add_note_with_tags(self):
+        v = self._vault()
+        add_note(v, "Title", "Body", ["tag1", "tag2"])
+        self.assertEqual(len(v["notes"]), 1)
+        self.assertEqual(v["notes"][0]["tags"], ["tag1", "tag2"])
+
+    def test_edit_note_tags(self):
+        v = self._vault()
+        add_note(v, "Title", "Body", ["tag1"])
+        edit_note(v, 1, title=None, body=None, tags=["tag2"])
+        self.assertEqual(v["notes"][0]["tags"], ["tag2"])
+
+    def test_search_notes(self):
+        from tsunami_notes.notes import search_notes
+        import sys
+        import io
+
+        v = self._vault()
+        add_note(v, "Secret meeting", "Meet at noon", [])
+
+        # Test finding in title
+        captured = io.StringIO()
+        sys.stdout = captured
+        search_notes(v, "meeting")
+        sys.stdout = sys.__stdout__
+        self.assertIn("Secret meeting", captured.getvalue())
+
+        # Test finding in body
+        captured = io.StringIO()
+        sys.stdout = captured
+        search_notes(v, "noon")
+        sys.stdout = sys.__stdout__
+        self.assertIn("Secret meeting", captured.getvalue())
+
+        # Test not finding
+        captured = io.StringIO()
+        sys.stdout = captured
+        search_notes(v, "xyz")
+        sys.stdout = sys.__stdout__
+        self.assertIn("No matching notes found", captured.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()
