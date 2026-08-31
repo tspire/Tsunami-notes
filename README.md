@@ -9,7 +9,12 @@ Private, secure, and encrypted notes app for Ubuntu, written in Python.
 - **Fresh salt & nonce** on every save — re-encrypts the vault from scratch each time.
 - **Atomic writes** — the vault file is replaced atomically to prevent corruption.
 - **Restrictive permissions** — vault file is saved as `0600` (owner read/write only).
-- Simple **CLI** interface — add, list, view, edit, and delete notes from the terminal.
+- **Dual Interface** — Simple **CLI** interface for the terminal, or a modern **GUI** with native OS styling.
+- **GUI Features**:
+  - Native OS theming with themed widgets (ttk)
+  - Scrollbars for notes list and editor
+  - Native application menu
+  - Status bar for non-intrusive feedback
 
 ## Requirements
 
@@ -31,6 +36,8 @@ Run the app from the virtualenv:
 make run ARGS="list"
 # or
 .venv/bin/tsunami list
+# or launch the GUI
+.venv/bin/tsunami gui
 ```
 
 ## Development tools
@@ -83,6 +90,16 @@ make build   # → dist/tsunami_notes-0.1.0-py3-none-any.whl
 
 ## Usage
 
+### GUI
+
+```bash
+tsunami gui
+```
+
+Launch the graphical interface with a notes list, editor, native menu, and status bar.
+
+### CLI
+
 ```bash
 tsunami <command> [options]
 ```
@@ -90,7 +107,7 @@ tsunami <command> [options]
 On first run a new vault is created after prompting you to set a master password.
 On subsequent runs you are prompted for the existing master password.
 
-### Commands
+#### Commands
 
 | Command | Description |
 |---------|-------------|
@@ -100,7 +117,7 @@ On subsequent runs you are prompted for the existing master password.
 | `edit <index> [--title T] [--body B]` | Edit a note |
 | `delete <index>` | Delete a note |
 
-### Examples
+#### Examples
 
 ```bash
 # Add a note
