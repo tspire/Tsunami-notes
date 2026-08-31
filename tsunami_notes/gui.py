@@ -1,24 +1,31 @@
 """GUI implementation for Tsunami Notes."""
 
-# pylint: disable=import-error
+# pylint: disable=import-error, too-many-instance-attributes, broad-exception-caught
 
 import os
 import json
-import tkinter as tk  # pylint: disable=import-error
+import random
+import time
 from tkinter import (
-    ttk,
+    Menu,
     messagebox,
     simpledialog,
     filedialog,
-)  # pylint: disable=import-error
+    Canvas,
+    BooleanVar,
+    StringVar,
+)
+import customtkinter as ctk
 
 from .audio import play_sound
 
+# Set CustomTkinter appearance to match Cyber-Oceanic
+ctk.set_appearance_mode("dark")
+ctk.set_default_color_theme("green")
 
-class TsunamiGUI(tk.Tk):
+
+class TsunamiGUI(ctk.CTk):
     """The main application window for Tsunami Notes."""
-
-    # pylint: disable=too-many-instance-attributes
 
     def _show_error(self, title, message):
         play_sound("navi_listen")
@@ -34,146 +41,239 @@ class TsunamiGUI(tk.Tk):
         self.password = password
         self.save_vault_fn = save_vault_fn
         self.current_index = None
-        self.listbox = None
-        self.title_entry = None
-        self.body_text = None
-        self.status_var = tk.StringVar()
-        self.keyboard_sound_enabled = tk.BooleanVar(value=False)
 
-        self.title("Tsunami Notes")
-        self.geometry("800x600")
+        self.title("Tsunami Notes - Cyber Oceanic Edition")
+        self.geometry("900x650")
+
+        # Colors
+        self.abyssal_black = "#050a0f"
+        self.neon_cyan = "#00ffff"
+        self.terminal_green = "#00ff00"
+        self.configure(fg_color=self.abyssal_black)
+
+        self.keyboard_sound_enabled = BooleanVar(value=True)
 
         self._build_ui()
         self._refresh_list()
-        self.status_var.set("Ready")
+        self.status_var.set("System Ready.")
 
     def _build_ui(self):
         """Construct the UI widgets."""
         # Menu Bar
-        menubar = tk.Menu(self)
+        menubar = Menu(self, bg=self.abyssal_black, fg=self.neon_cyan)
         self.config(menu=menubar)
 
-        settings_menu = tk.Menu(menubar, tearoff=0)
+        settings_menu = Menu(
+            menubar, tearoff=0, bg=self.abyssal_black, fg=self.terminal_green
+        )
         menubar.add_cascade(label="Settings", menu=settings_menu)
         settings_menu.add_checkbutton(
             label="Keyboard Sounds", variable=self.keyboard_sound_enabled
         )
         settings_menu.add_separator()
-        settings_menu.add_command(label="list", command=self._cmd_list)
-        settings_menu.add_command(label="add", command=self._cmd_add)
-        settings_menu.add_command(label="view", command=self._cmd_view)
-        settings_menu.add_command(label="edit", command=self._cmd_edit)
-        settings_menu.add_command(label="delete", command=self._cmd_delete)
-        settings_menu.add_command(label="search", command=self._cmd_search)
-        settings_menu.add_command(label="export", command=self._cmd_export)
-        settings_menu.add_command(label="import", command=self._cmd_import)
-        settings_menu.add_command(label="trash", command=self._cmd_trash)
-        settings_menu.add_command(label="interactive", command=self._cmd_interactive)
-        settings_menu.add_command(label="passwd", command=self._cmd_passwd)
+        settings_menu.add_command(label="Export", command=self._cmd_export)
+        settings_menu.add_command(label="Import", command=self._cmd_import)
+        settings_menu.add_command(label="Trash", command=self._cmd_trash)
+        settings_menu.add_command(label="Password", command=self._cmd_passwd)
 
         # Toolbar
-        toolbar = ttk.Frame(self)
-        toolbar.pack(side=tk.TOP, fill=tk.X, padx=5, pady=5)
+        toolbar = ctk.CTkFrame(self, fg_color="transparent")
+        toolbar.pack(side="top", fill="x", padx=10, pady=10)
 
-        btn_add = ttk.Button(toolbar, text="Add Note", command=self.add_note)
-        btn_add.pack(side=tk.LEFT, padx=2, pady=2)
-
-        btn_del = ttk.Button(toolbar, text="Delete Note", command=self.delete_note)
-        btn_del.pack(side=tk.LEFT, padx=2, pady=2)
-
-        btn_save = ttk.Button(toolbar, text="Save Note", command=self.save_current_note)
-        btn_save.pack(side=tk.LEFT, padx=2, pady=2)
-
-        # PanedWindow for main content
-        paned = ttk.PanedWindow(self, orient=tk.HORIZONTAL)
-        paned.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-
-        # Left pane (Listbox with scrollbar)
-        left_frame = ttk.Frame(paned)
-        paned.add(left_frame, weight=1)
-
-        list_scroll = ttk.Scrollbar(left_frame, orient=tk.VERTICAL)
-        list_scroll.pack(side=tk.RIGHT, fill=tk.Y)
-
-        self.listbox = tk.Listbox(
-            left_frame, width=30, yscrollcommand=list_scroll.set, font=("Helvetica", 11)
+        btn_add = ctk.CTkButton(
+            toolbar,
+            text="Add Note",
+            command=self.add_note,
+            fg_color="#004444",
+            text_color=self.neon_cyan,
+            hover_color="#008888",
         )
-        self.listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        list_scroll.config(command=self.listbox.yview)
-        self.listbox.bind("<<ListboxSelect>>", self.on_select)
+        btn_add.pack(side="left", padx=5)
 
-        # Right pane (Editor with scrollbar)
-        right_frame = ttk.Frame(paned)
-        paned.add(right_frame, weight=3)
-
-        self.title_entry = ttk.Entry(right_frame, font=("Helvetica", 14, "bold"))
-        self.title_entry.pack(side=tk.TOP, fill=tk.X, padx=2, pady=(0, 5))
-
-        text_frame = ttk.Frame(right_frame)
-        text_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
-
-        text_scroll = ttk.Scrollbar(text_frame, orient=tk.VERTICAL)
-        text_scroll.pack(side=tk.RIGHT, fill=tk.Y)
-
-        self.body_text = tk.Text(
-            text_frame,
-            yscrollcommand=text_scroll.set,
-            font=("Consolas", 11),
-            wrap=tk.WORD,
+        btn_del = ctk.CTkButton(
+            toolbar,
+            text="Delete Note",
+            command=self.delete_note,
+            fg_color="#440000",
+            text_color="red",
+            hover_color="#880000",
         )
-        self.body_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        text_scroll.config(command=self.body_text.yview)
+        btn_del.pack(side="left", padx=5)
+
+        btn_save = ctk.CTkButton(
+            toolbar,
+            text="Save Note",
+            command=self.save_current_note,
+            fg_color="#004400",
+            text_color=self.terminal_green,
+            hover_color="#008800",
+        )
+        btn_save.pack(side="left", padx=5)
+
+        btn_search = ctk.CTkButton(
+            toolbar,
+            text="Search",
+            command=self._cmd_search,
+            fg_color="#004444",
+            text_color=self.neon_cyan,
+            hover_color="#008888",
+        )
+        btn_search.pack(side="right", padx=5)
+
+        # Main Content
+        main_frame = ctk.CTkFrame(self, fg_color="transparent")
+        main_frame.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+
+        # Left pane (Listbox)
+        left_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        left_frame.pack(side="left", fill="y", padx=(0, 10))
+
+        self.listbox = ctk.CTkTextbox(
+            left_frame,
+            width=250,
+            font=("Consolas", 14),
+            fg_color="#0a192f",
+            text_color=self.neon_cyan,
+            border_color=self.neon_cyan,
+            border_width=2,
+        )
+        self.listbox.pack(side="left", fill="both", expand=True)
+        # We will use this as a clickable list by binding tags
+        self.listbox.bind("<Button-1>", self._on_list_click)
+        self.listbox.configure(state="disabled")
+
+        # Right pane (Editor)
+        right_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        right_frame.pack(side="right", fill="both", expand=True)
+
+        self.title_entry = ctk.CTkEntry(
+            right_frame,
+            font=("Helvetica", 16, "bold"),
+            fg_color="#0a192f",
+            text_color=self.terminal_green,
+            border_color=self.neon_cyan,
+            border_width=2,
+        )
+        self.title_entry.pack(side="top", fill="x", pady=(0, 10))
+
+        self.body_text = ctk.CTkTextbox(
+            right_frame,
+            font=("Consolas", 14),
+            fg_color="#0a192f",
+            text_color=self.terminal_green,
+            border_color=self.neon_cyan,
+            border_width=2,
+        )
+        self.body_text.pack(side="top", fill="both", expand=True)
 
         self.body_text.bind("<KeyPress>", self._on_key_press)
         self.title_entry.bind("<KeyPress>", self._on_key_press)
+
+        # Status Bar
+        self.status_var = StringVar()
+        status_bar = ctk.CTkLabel(
+            self,
+            textvariable=self.status_var,
+            anchor="w",
+            text_color=self.neon_cyan,
+            font=("Consolas", 12),
+        )
+        status_bar.pack(side="bottom", fill="x", padx=10, pady=(0, 5))
+
+        # Canvas for Overlay Animations
+
+        self.overlay = Canvas(self, bg=self.abyssal_black, highlightthickness=0)
+        self.overlay.place(x=0, y=0, relwidth=1, relheight=1)
+        self.overlay.lower()  # Hide it initially by pushing it back
 
     def _on_key_press(self, event):  # pylint: disable=unused-argument
         if self.keyboard_sound_enabled.get():
             play_sound("keyboard_click")
 
-        # Status Bar
-        status_bar = ttk.Label(
-            self, textvariable=self.status_var, relief=tk.SUNKEN, anchor=tk.W
-        )
-        status_bar.pack(side=tk.BOTTOM, fill=tk.X)
-
     def _refresh_list(self):
-        """Refresh the list of notes in the Listbox."""
-        self.listbox.delete(0, tk.END)
+        self.listbox.configure(state="normal")
+        self.listbox.delete("1.0", "end")
         for i, note in enumerate(self.vault.get("notes", [])):
-            self.listbox.insert(tk.END, f"{i+1}. {note.get('title', '(untitled)')}")
+            title = note.get("title", "(untitled)")
+            self.listbox.insert("end", f"{i+1}. {title}\n")
+        self.listbox.configure(state="disabled")
 
-    def on_select(self, event):  # pylint: disable=unused-argument
-        """Handle listbox selection."""
-        selection = self.listbox.curselection()
-        if not selection:
-            return
+    def _on_list_click(self, event):
+        index = self.listbox.index(f"@{event.x},{event.y}")
+        line_num = int(index.split(".")[0]) - 1
+        notes = self.vault.get("notes", [])
+        if 0 <= line_num < len(notes):
+            self.current_index = line_num
+            note = notes[line_num]
+            self.title_entry.delete(0, "end")
+            self.title_entry.insert(0, note.get("title", ""))
+            self.body_text.delete("1.0", "end")
+            self.body_text.insert("1.0", note.get("body", ""))
 
-        index = selection[0]
-        self.current_index = index
-        note = self.vault["notes"][index]
+    def _play_overlay_animation(self, anim_type):
+        self.overlay.lift()
+        self.overlay.delete("all")
+        width = self.winfo_width()
+        height = self.winfo_height()
 
-        self.title_entry.delete(0, tk.END)
-        self.title_entry.insert(0, note.get("title", ""))
+        if anim_type == "delete":
+            # Simple whirlpool-ish particle effect
+            particles = []
+            for _ in range(100):
+                x = random.randint(0, width)
+                y = random.randint(0, height)
+                p = self.overlay.create_text(
+                    x,
+                    y,
+                    text=random.choice(["~", "@", "O"]),
+                    fill=self.neon_cyan,
+                    font=("Consolas", 16),
+                )
+                particles.append((p, x, y))
 
-        self.body_text.delete("1.0", tk.END)
-        self.body_text.insert("1.0", note.get("body", ""))
+            for _ in range(20):
+                for p, px, py in particles:
+                    dx = (width / 2) - px
+                    dy = (height / 2) - py
+                    self.overlay.move(p, dx * 0.1, dy * 0.1)
+                self.update()
+                time.sleep(0.02)
+        elif anim_type == "save":
+            # Matrix rain effect
+            columns = width // 15
+            drops = [random.randint(0, height) for _ in range(columns)]
+            for _ in range(15):
+                self.overlay.delete("all")
+                for i in range(columns):
+                    x = i * 15
+                    y = drops[i]
+                    self.overlay.create_text(
+                        x,
+                        y,
+                        text=random.choice(
+                            "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%^&*"
+                        ),
+                        fill=self.terminal_green,
+                        font=("Consolas", 14),
+                    )
+                    drops[i] = (drops[i] + 20) % height
+                self.update()
+                time.sleep(0.03)
+
+        self.overlay.delete("all")
+        self.overlay.lower()
 
     def add_note(self):
         """Prompt and add a new note."""
         title = simpledialog.askstring("New Note", "Enter note title:")
         if title is not None:
             self.vault.setdefault("notes", []).append({"title": title, "body": ""})
-            self._save_vault()
+            self._save_vault(anim="save")
             self._refresh_list()
-            self.listbox.selection_clear(0, tk.END)
-            last_index = self.listbox.size() - 1
-            self.listbox.selection_set(last_index)
-            # manually trigger on_select behavior to avoid reliance on event loop
-            self.current_index = last_index
-            self.title_entry.delete(0, tk.END)
+            self.current_index = len(self.vault["notes"]) - 1
+            self.title_entry.delete(0, "end")
             self.title_entry.insert(0, title)
-            self.body_text.delete("1.0", tk.END)
+            self.body_text.delete("1.0", "end")
             self.status_var.set("Note added.")
 
     def delete_note(self):
@@ -182,12 +282,14 @@ class TsunamiGUI(tk.Tk):
             if messagebox.askyesno(
                 "Confirm Delete", "Are you sure you want to delete this note?"
             ):
+                self._play_overlay_animation("delete")
                 notes = self.vault.get("notes", [])
                 if 0 <= self.current_index < len(notes):
-                    notes.pop(self.current_index)
+                    trash_item = notes.pop(self.current_index)
+                    self.vault.setdefault("trash", []).append(trash_item)
                 self.current_index = None
-                self.title_entry.delete(0, tk.END)
-                self.body_text.delete("1.0", tk.END)
+                self.title_entry.delete(0, "end")
+                self.body_text.delete("1.0", "end")
                 self._save_vault()
                 self._refresh_list()
                 self.status_var.set("Note deleted.")
@@ -203,76 +305,15 @@ class TsunamiGUI(tk.Tk):
             note = self.vault["notes"][self.current_index]
             note["title"] = new_title
             note["body"] = new_body
-            self._save_vault()
+            self._save_vault(anim="save")
             self._refresh_list()
-            self.listbox.selection_set(self.current_index)
             self.status_var.set("Note saved.")
 
-    def _save_vault(self):
-        """Save the vault securely."""
+    def _save_vault(self, anim=None):
+        if anim:
+            self._play_overlay_animation(anim)
+        play_sound("zelda_secret")
         self.save_vault_fn(self.vault_path, self.password, self.vault)
-
-    def _cmd_list(self):
-        self._refresh_list()
-        self.status_var.set(f"Loaded {len(self.vault.get('notes', []))} notes.")
-
-    def _cmd_add(self):
-        self.add_note()
-
-    def _cmd_view(self):
-        idx_str = simpledialog.askstring("View Note", "Enter note index (1-based):")
-        if idx_str and idx_str.isdigit():
-            idx = int(idx_str) - 1
-            notes = self.vault.get("notes", [])
-            if 0 <= idx < len(notes):
-                self.listbox.selection_clear(0, tk.END)
-                self.listbox.selection_set(idx)
-                self.current_index = idx
-                note = notes[idx]
-                self.title_entry.delete(0, tk.END)
-                self.title_entry.insert(0, note.get("title", ""))
-                self.body_text.delete("1.0", tk.END)
-                self.body_text.insert("1.0", note.get("body", ""))
-            else:
-                self._show_error("Error", "Invalid index.")
-
-    def _cmd_edit(self):
-        idx_str = simpledialog.askstring(
-            "Edit Note", "Enter note index (1-based) to edit:"
-        )
-        if idx_str and idx_str.isdigit():
-            idx = int(idx_str) - 1
-            notes = self.vault.get("notes", [])
-            if 0 <= idx < len(notes):
-                self.listbox.selection_clear(0, tk.END)
-                self.listbox.selection_set(idx)
-                self.current_index = idx
-                note = notes[idx]
-                self.title_entry.delete(0, tk.END)
-                self.title_entry.insert(0, note.get("title", ""))
-                self.body_text.delete("1.0", tk.END)
-                self.body_text.insert("1.0", note.get("body", ""))
-            else:
-                self._show_error("Error", "Invalid index.")
-
-    def _cmd_delete(self):
-        idx_str = simpledialog.askstring("Delete Note", "Enter note index (1-based):")
-        if idx_str and idx_str.isdigit():
-            idx = int(idx_str) - 1
-            notes = self.vault.get("notes", [])
-            if 0 <= idx < len(notes):
-                if messagebox.askyesno(
-                    "Confirm Delete", "Are you sure you want to delete this note?"
-                ):
-                    trash = self.vault.setdefault("trash", [])
-                    trash.append(notes.pop(idx))
-                    self._save_vault()
-                    self._refresh_list()
-                    self.current_index = None
-                    self.title_entry.delete(0, tk.END)
-                    self.body_text.delete("1.0", tk.END)
-            else:
-                self._show_error("Error", "Invalid index.")
 
     def _cmd_search(self):
         query = simpledialog.askstring("Search", "Enter keyword:")
@@ -299,7 +340,7 @@ class TsunamiGUI(tk.Tk):
                 with os.fdopen(fd, "w", encoding="utf-8") as f:
                     json.dump(self.vault, f, indent=2, ensure_ascii=False)
                 self.status_var.set(f"Vault exported to {path}.")
-            except Exception as e:  # pylint: disable=broad-exception-caught
+            except Exception as e:
                 self._show_error("Export Error", str(e))
 
     def _cmd_import(self):
@@ -315,10 +356,10 @@ class TsunamiGUI(tk.Tk):
                     self.status_var.set("No notes found in the import file.")
                     return
                 self.vault.setdefault("notes", []).extend(imported_notes)
-                self._save_vault()
+                self._save_vault(anim="save")
                 self._refresh_list()
                 self.status_var.set(f"Imported {len(imported_notes)} notes.")
-            except Exception as e:  # pylint: disable=broad-exception-caught
+            except Exception as e:
                 self._show_error("Import Error", f"Failed to read {path}: {e}")
 
     def _cmd_trash(self):
@@ -341,16 +382,11 @@ class TsunamiGUI(tk.Tk):
             if 0 <= idx < len(trash):
                 notes = self.vault.setdefault("notes", [])
                 notes.append(trash.pop(idx))
-                self._save_vault()
+                self._save_vault(anim="save")
                 self._refresh_list()
                 self._show_info("Trash", "Item restored.")
             else:
                 self._show_error("Error", "Invalid index.")
-
-    def _cmd_interactive(self):
-        self._show_info(
-            "Interactive", "Please run 'tsunami interactive' in your terminal."
-        )
 
     def _cmd_passwd(self):
         new_pwd = simpledialog.askstring(
@@ -362,7 +398,7 @@ class TsunamiGUI(tk.Tk):
             )
             if new_pwd == confirm:
                 self.password = new_pwd
-                self._save_vault()
+                self._save_vault(anim="save")
                 self._show_info("Password", "Master password changed successfully.")
             else:
                 self._show_error("Error", "Passwords do not match.")
