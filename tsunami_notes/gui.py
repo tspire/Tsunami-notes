@@ -212,7 +212,7 @@ class TsunamiGUI(ctk.CTk):
             self.body_text.insert("1.0", note.get("body", ""))
 
     def _play_overlay_animation(self, anim_type):
-        self.overlay.lift()
+        tk.Misc.lift(self.overlay)
         self.overlay.delete("all")
         width = self.winfo_width()
         height = self.winfo_height()
