@@ -1,6 +1,6 @@
 [build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
 
 [project]
 name = "tsunami-notes"
@@ -9,7 +9,6 @@ description = "Private, secure, encrypted notes app for Ubuntu."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "cryptography>=41.0.0",
     "rich>=13.0.0",
     "textual>=0.40.0",
     "pygame>=2.0.0",
@@ -18,8 +17,13 @@ dependencies = [
 [project.scripts]
 tsunami = "tsunami_notes.notes:main"
 
-[tool.setuptools]
-packages = ["tsunami_notes"]
+[tool.maturin]
+features = ["pyo3/extension-module"]
+python-source = "."
+module-name = "tsunami_notes.crypto"
 
 [tool.black]
 target-version = ["py310"]
+
+[tool.pylint.master]
+extension-pkg-allow-list = "tsunami_notes.crypto"
