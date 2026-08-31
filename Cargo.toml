@@ -1,0 +1,16 @@
+[package]
+name = "tsunami-notes"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "tsunami_crypto"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.21.0", features = ["extension-module"] }
+scrypt = "0.11.0"
+aes-gcm = "0.10.3"
+rand = "0.8.5"
+serde_json = "1.0"
+tempfile = "3.10"

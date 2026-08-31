@@ -4,23 +4,22 @@ import argparse
 import json
 import os
 import re
-import secrets
 import shlex
 import subprocess
 import sys
 import tempfile
 import time
 
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
+from rich.align import Align
 from rich.console import Console
 from rich.live import Live
-from rich.align import Align
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.table import Table
 from rich.text import Text
+
+from tsunami_notes import crypto
 
 console = Console()
 
@@ -61,79 +60,26 @@ NONCE_BYTES = 12  # GCM standard nonce
 
 
 def _derive_key(password: str, salt: bytes) -> bytes:
-    """Derive a 256-bit key from *password* using Scrypt."""
-    kdf = Scrypt(salt=salt, length=KEY_BYTES, n=SCRYPT_N, r=SCRYPT_R, p=SCRYPT_P)
-    return kdf.derive(password.encode("utf-8"))
+    return crypto.derive_key(password, salt)
 
 
 def _encrypt(key: bytes, plaintext: bytes) -> bytes:
-    """Encrypt *plaintext* with AES-256-GCM; returns nonce + ciphertext."""
-    nonce = secrets.token_bytes(NONCE_BYTES)
-    aesgcm = AESGCM(key)
-    ciphertext = aesgcm.encrypt(nonce, plaintext, None)
-    return nonce + ciphertext
+    return crypto.encrypt(key, plaintext)
 
 
 def _decrypt(key: bytes, data: bytes) -> bytes:
-    """Decrypt data produced by :func:`_encrypt`."""
-    nonce, ciphertext = data[:NONCE_BYTES], data[NONCE_BYTES:]
-    aesgcm = AESGCM(key)
-    return aesgcm.decrypt(nonce, ciphertext, None)
+    return crypto.decrypt(key, data)
 
 
 def load_vault(path: str, password: str) -> dict:
-    """Load and decrypt the notes vault from *path*.
-
-    Returns an empty vault dict when the file does not exist yet.
-    Raises ``ValueError`` on wrong password or corrupted data.
-    """
-    if not os.path.exists(path):
-        return {"notes": []}
-
-    with open(path, "rb") as fh:
-        raw = fh.read()
-
-    # Layout: salt (32 B) | encrypted JSON
-    salt = raw[:SALT_BYTES]
-    encrypted = raw[SALT_BYTES:]
-
-    key = _derive_key(password, salt)
-    try:
-        plaintext = _decrypt(key, encrypted)
-    except Exception as exc:
-        raise ValueError("Wrong password or corrupted vault.") from exc
-
-    return json.loads(plaintext.decode("utf-8"))
-
-
-def _open_secure(path: str):
-    """Open *path* for writing with 0o600 permissions, created atomically."""
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    return os.fdopen(fd, "wb")
+    """Load and decrypt the notes vault from *path*."""
+    return crypto.load_vault(path, password)
 
 
 def save_vault(path: str, password: str, vault: dict) -> None:
     """Encrypt and persist *vault* to *path*."""
-    salt = secrets.token_bytes(SALT_BYTES)
     with console.status("Encrypting vault...", spinner="dots"):
-        key = _derive_key(password, salt)
-        plaintext = json.dumps(vault, ensure_ascii=False).encode("utf-8")
-        encrypted = _encrypt(key, plaintext)
-
-    # Write atomically to avoid partial-write corruption
-    tmp_path = path + ".tmp"
-    # Remove stale temp file if present (e.g. from a previous crash)
-    try:
-        os.remove(tmp_path)
-    except FileNotFoundError:
-        pass
-    with _open_secure(tmp_path) as fh:
-        fh.write(salt + encrypted)
-    os.replace(tmp_path, path)
-
-    # Re-apply restrictive permissions on the final path (replace may inherit
-    # the source inode mode, which is already 0o600, but be explicit).
-    os.chmod(path, 0o600)
+        crypto.save_vault(path, password, vault)
 
 
 # ---------------------------------------------------------------------------
