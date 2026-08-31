@@ -1,9 +1,16 @@
 """GUI implementation for Tsunami Notes."""
 
+# pylint: disable=import-error
+
 import os
 import json
 import tkinter as tk  # pylint: disable=import-error
-from tkinter import messagebox, simpledialog, filedialog  # pylint: disable=import-error
+from tkinter import (
+    ttk,
+    messagebox,
+    simpledialog,
+    filedialog,
+)  # pylint: disable=import-error
 
 
 class TsunamiGUI(tk.Tk):
@@ -21,62 +28,93 @@ class TsunamiGUI(tk.Tk):
         self.listbox = None
         self.title_entry = None
         self.body_text = None
+        self.status_var = tk.StringVar()
 
         self.title("Tsunami Notes")
         self.geometry("800x600")
 
         self._build_ui()
         self._refresh_list()
+        self.status_var.set("Ready")
 
     def _build_ui(self):
         """Construct the UI widgets."""
-        toolbar = tk.Frame(self)
-        toolbar.pack(side=tk.TOP, fill=tk.X)
+        # Menu Bar
+        menubar = tk.Menu(self)
+        self.config(menu=menubar)
 
-        btn_add = tk.Button(toolbar, text="Add Note", command=self.add_note)
+        settings_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Settings", menu=settings_menu)
+        settings_menu.add_command(label="list", command=self._cmd_list)
+        settings_menu.add_command(label="add", command=self._cmd_add)
+        settings_menu.add_command(label="view", command=self._cmd_view)
+        settings_menu.add_command(label="edit", command=self._cmd_edit)
+        settings_menu.add_command(label="delete", command=self._cmd_delete)
+        settings_menu.add_command(label="search", command=self._cmd_search)
+        settings_menu.add_command(label="export", command=self._cmd_export)
+        settings_menu.add_command(label="import", command=self._cmd_import)
+        settings_menu.add_command(label="trash", command=self._cmd_trash)
+        settings_menu.add_command(label="interactive", command=self._cmd_interactive)
+        settings_menu.add_command(label="passwd", command=self._cmd_passwd)
+
+        # Toolbar
+        toolbar = ttk.Frame(self)
+        toolbar.pack(side=tk.TOP, fill=tk.X, padx=5, pady=5)
+
+        btn_add = ttk.Button(toolbar, text="Add Note", command=self.add_note)
         btn_add.pack(side=tk.LEFT, padx=2, pady=2)
 
-        btn_del = tk.Button(toolbar, text="Delete Note", command=self.delete_note)
+        btn_del = ttk.Button(toolbar, text="Delete Note", command=self.delete_note)
         btn_del.pack(side=tk.LEFT, padx=2, pady=2)
 
-        btn_save = tk.Button(toolbar, text="Save Note", command=self.save_current_note)
+        btn_save = ttk.Button(toolbar, text="Save Note", command=self.save_current_note)
         btn_save.pack(side=tk.LEFT, padx=2, pady=2)
 
-        self.btn_settings = tk.Menubutton(toolbar, text="Settings", relief=tk.RAISED)
-        self.btn_settings.pack(side=tk.LEFT, padx=2, pady=2)
+        # PanedWindow for main content
+        paned = ttk.PanedWindow(self, orient=tk.HORIZONTAL)
+        paned.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
-        self.settings_menu = tk.Menu(self.btn_settings, tearoff=0)
-        self.btn_settings.config(menu=self.settings_menu)
+        # Left pane (Listbox with scrollbar)
+        left_frame = ttk.Frame(paned)
+        paned.add(left_frame, weight=1)
 
-        self.settings_menu.add_command(label="list", command=self._cmd_list)
-        self.settings_menu.add_command(label="add", command=self._cmd_add)
-        self.settings_menu.add_command(label="view", command=self._cmd_view)
-        self.settings_menu.add_command(label="edit", command=self._cmd_edit)
-        self.settings_menu.add_command(label="delete", command=self._cmd_delete)
-        self.settings_menu.add_command(label="search", command=self._cmd_search)
-        self.settings_menu.add_command(label="export", command=self._cmd_export)
-        self.settings_menu.add_command(label="import", command=self._cmd_import)
-        self.settings_menu.add_command(label="trash", command=self._cmd_trash)
-        self.settings_menu.add_command(
-            label="interactive", command=self._cmd_interactive
+        list_scroll = ttk.Scrollbar(left_frame, orient=tk.VERTICAL)
+        list_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self.listbox = tk.Listbox(
+            left_frame, width=30, yscrollcommand=list_scroll.set, font=("Helvetica", 11)
         )
-        self.settings_menu.add_command(label="passwd", command=self._cmd_passwd)
-
-        paned = tk.PanedWindow(self, orient=tk.HORIZONTAL)
-        paned.pack(fill=tk.BOTH, expand=True)
-
-        self.listbox = tk.Listbox(paned, width=30)
-        paned.add(self.listbox)
+        self.listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        list_scroll.config(command=self.listbox.yview)
         self.listbox.bind("<<ListboxSelect>>", self.on_select)
 
-        right_frame = tk.Frame(paned)
-        paned.add(right_frame)
+        # Right pane (Editor with scrollbar)
+        right_frame = ttk.Frame(paned)
+        paned.add(right_frame, weight=3)
 
-        self.title_entry = tk.Entry(right_frame)
-        self.title_entry.pack(side=tk.TOP, fill=tk.X, padx=5, pady=5)
+        self.title_entry = ttk.Entry(right_frame, font=("Helvetica", 14, "bold"))
+        self.title_entry.pack(side=tk.TOP, fill=tk.X, padx=2, pady=(0, 5))
 
-        self.body_text = tk.Text(right_frame)
-        self.body_text.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=5, pady=5)
+        text_frame = ttk.Frame(right_frame)
+        text_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+        text_scroll = ttk.Scrollbar(text_frame, orient=tk.VERTICAL)
+        text_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self.body_text = tk.Text(
+            text_frame,
+            yscrollcommand=text_scroll.set,
+            font=("Consolas", 11),
+            wrap=tk.WORD,
+        )
+        self.body_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        text_scroll.config(command=self.body_text.yview)
+
+        # Status Bar
+        status_bar = ttk.Label(
+            self, textvariable=self.status_var, relief=tk.SUNKEN, anchor=tk.W
+        )
+        status_bar.pack(side=tk.BOTTOM, fill=tk.X)
 
     def _refresh_list(self):
         """Refresh the list of notes in the Listbox."""
@@ -115,6 +153,7 @@ class TsunamiGUI(tk.Tk):
             self.title_entry.delete(0, tk.END)
             self.title_entry.insert(0, title)
             self.body_text.delete("1.0", tk.END)
+            self.status_var.set("Note added.")
 
     def delete_note(self):
         """Delete the currently selected note."""
@@ -130,8 +169,9 @@ class TsunamiGUI(tk.Tk):
                 self.body_text.delete("1.0", tk.END)
                 self._save_vault()
                 self._refresh_list()
+                self.status_var.set("Note deleted.")
         else:
-            messagebox.showinfo("No Selection", "Please select a note to delete.")
+            self.status_var.set("Please select a note to delete.")
 
     def save_current_note(self):
         """Save changes to the currently edited note."""
@@ -145,6 +185,7 @@ class TsunamiGUI(tk.Tk):
             self._save_vault()
             self._refresh_list()
             self.listbox.selection_set(self.current_index)
+            self.status_var.set("Note saved.")
 
     def _save_vault(self):
         """Save the vault securely."""
@@ -152,7 +193,7 @@ class TsunamiGUI(tk.Tk):
 
     def _cmd_list(self):
         self._refresh_list()
-        messagebox.showinfo("List", f"Loaded {len(self.vault.get('notes', []))} notes.")
+        self.status_var.set(f"Loaded {len(self.vault.get('notes', []))} notes.")
 
     def _cmd_add(self):
         self.add_note()
@@ -236,7 +277,7 @@ class TsunamiGUI(tk.Tk):
                 fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
                 with os.fdopen(fd, "w", encoding="utf-8") as f:
                     json.dump(self.vault, f, indent=2, ensure_ascii=False)
-                messagebox.showinfo("Export", f"Vault exported to {path}.")
+                self.status_var.set(f"Vault exported to {path}.")
             except Exception as e:  # pylint: disable=broad-exception-caught
                 messagebox.showerror("Export Error", str(e))
 
@@ -250,12 +291,12 @@ class TsunamiGUI(tk.Tk):
                     data = json.load(f)
                 imported_notes = data.get("notes", [])
                 if not imported_notes:
-                    messagebox.showinfo("Import", "No notes found in the import file.")
+                    self.status_var.set("No notes found in the import file.")
                     return
                 self.vault.setdefault("notes", []).extend(imported_notes)
                 self._save_vault()
                 self._refresh_list()
-                messagebox.showinfo("Import", f"Imported {len(imported_notes)} notes.")
+                self.status_var.set(f"Imported {len(imported_notes)} notes.")
             except Exception as e:  # pylint: disable=broad-exception-caught
                 messagebox.showerror("Import Error", f"Failed to read {path}: {e}")
 
