@@ -21,9 +21,23 @@ import customtkinter as ctk
 
 from .audio import play_sound
 
-# Set CustomTkinter appearance to match Cyber-Oceanic
+# Set CustomTkinter appearance to match the application palette.
 ctk.set_appearance_mode("dark")
-ctk.set_default_color_theme("green")
+ctk.set_default_color_theme("blue")
+
+COLORS = {
+    "abyss": "#07111F",
+    "surface": "#0B1829",
+    "elevated": "#102238",
+    "border": "#1D3A55",
+    "muted": "#7892A8",
+    "text": "#E7F4FA",
+    "cyan": "#36D6D0",
+    "cyan_hover": "#28B9B5",
+    "danger": "#E36B78",
+    "danger_hover": "#BE5260",
+    "warning": "#E7B96C",
+}
 
 
 class TsunamiGUI(ctk.CTk):
@@ -44,31 +58,43 @@ class TsunamiGUI(ctk.CTk):
         self.save_vault_fn = save_vault_fn
         self.current_index = None
 
-        self.title("Tsunami Notes - Cyber Oceanic Edition")
-        self.geometry("900x650")
+        self.title("Tsunami Notes")
+        self.geometry("1120x760")
+        self.minsize(860, 580)
 
-        # Colors
-        self.abyssal_black = "#050a0f"
-        self.neon_cyan = "#00ffff"
-        self.terminal_green = "#00ff00"
+        self.abyssal_black = COLORS["abyss"]
+        self.neon_cyan = COLORS["cyan"]
+        self.terminal_green = COLORS["text"]
         self.configure(fg_color=self.abyssal_black)
 
         self.keyboard_sound_enabled = BooleanVar(value=True)
 
         self._build_ui()
         self._refresh_list()
-        self.status_var.set("System Ready.")
+        self.status_var.set("Vault encrypted · Ready")
 
     def _build_ui(self):
         """Construct the UI widgets."""
-        # Menu Bar
-        menubar = Menu(self, bg=self.abyssal_black, fg=self.neon_cyan)
+        menubar = Menu(
+            self,
+            bg=COLORS["surface"],
+            fg=COLORS["text"],
+            activebackground=COLORS["elevated"],
+            activeforeground=COLORS["cyan"],
+            borderwidth=0,
+        )
         self.config(menu=menubar)
 
         settings_menu = Menu(
-            menubar, tearoff=0, bg=self.abyssal_black, fg=self.terminal_green
+            menubar,
+            tearoff=0,
+            bg=COLORS["surface"],
+            fg=COLORS["text"],
+            activebackground=COLORS["elevated"],
+            activeforeground=COLORS["cyan"],
+            borderwidth=0,
         )
-        menubar.add_cascade(label="Settings", menu=settings_menu)
+        menubar.add_cascade(label="Vault", menu=settings_menu)
         settings_menu.add_checkbutton(
             label="Keyboard Sounds", variable=self.keyboard_sound_enabled
         )
@@ -78,138 +104,251 @@ class TsunamiGUI(ctk.CTk):
         settings_menu.add_command(label="Trash", command=self._cmd_trash)
         settings_menu.add_command(label="Password", command=self._cmd_passwd)
 
-        # Toolbar
-        toolbar = ctk.CTkFrame(self, fg_color="transparent")
-        toolbar.pack(side="top", fill="x", padx=10, pady=10)
+        header = ctk.CTkFrame(self, fg_color="transparent")
+        header.pack(side="top", fill="x", padx=28, pady=(24, 16))
+        brand = ctk.CTkFrame(header, fg_color="transparent")
+        brand.pack(side="left")
+        ctk.CTkLabel(
+            brand,
+            text="TSUNAMI",
+            font=("DejaVu Sans", 22, "bold"),
+            text_color=COLORS["text"],
+        ).pack(anchor="w")
+        ctk.CTkLabel(
+            brand,
+            text="PRIVATE NOTES  /  AES-256 VAULT",
+            font=("DejaVu Sans Mono", 10),
+            text_color=COLORS["muted"],
+        ).pack(anchor="w", pady=(1, 0))
+
+        toolbar = ctk.CTkFrame(header, fg_color="transparent")
+        toolbar.pack(side="right")
 
         btn_add = ctk.CTkButton(
             toolbar,
-            text="Add Note",
+            text="+  New note",
             command=self.add_note,
-            fg_color="#004444",
-            text_color=self.neon_cyan,
-            hover_color="#008888",
+            width=122,
+            height=38,
+            corner_radius=9,
+            font=("DejaVu Sans", 13, "bold"),
+            fg_color=COLORS["cyan"],
+            text_color=COLORS["abyss"],
+            hover_color=COLORS["cyan_hover"],
         )
-        btn_add.pack(side="left", padx=5)
+        btn_add.pack(side="left", padx=(0, 8))
 
         btn_del = ctk.CTkButton(
             toolbar,
-            text="Delete Note",
+            text="Delete",
             command=self.delete_note,
-            fg_color="#440000",
-            text_color="red",
-            hover_color="#880000",
+            width=88,
+            height=38,
+            corner_radius=9,
+            fg_color=COLORS["surface"],
+            border_width=1,
+            border_color=COLORS["border"],
+            text_color=COLORS["danger"],
+            hover_color=COLORS["elevated"],
         )
-        btn_del.pack(side="left", padx=5)
+        btn_del.pack(side="right")
 
         btn_save = ctk.CTkButton(
             toolbar,
-            text="Save Note",
+            text="Save",
             command=self.save_current_note,
-            fg_color="#004400",
-            text_color=self.terminal_green,
-            hover_color="#008800",
+            width=88,
+            height=38,
+            corner_radius=9,
+            fg_color=COLORS["surface"],
+            border_width=1,
+            border_color=COLORS["border"],
+            text_color=COLORS["text"],
+            hover_color=COLORS["elevated"],
         )
-        btn_save.pack(side="left", padx=5)
+        btn_save.pack(side="left", padx=(0, 8))
 
         btn_protect = ctk.CTkButton(
             toolbar,
             text="Protect",
             command=self.protect_current_note,
-            fg_color="#444400",
-            text_color="#ffff00",
-            hover_color="#888800",
+            width=88,
+            height=38,
+            corner_radius=9,
+            fg_color=COLORS["surface"],
+            border_width=1,
+            border_color=COLORS["border"],
+            text_color=COLORS["warning"],
+            hover_color=COLORS["elevated"],
         )
-        btn_protect.pack(side="left", padx=5)
+        btn_protect.pack(side="left", padx=(0, 8))
 
-        btn_search = ctk.CTkButton(
-            toolbar,
-            text="Search",
-            command=self._cmd_search,
-            fg_color="#004444",
-            text_color=self.neon_cyan,
-            hover_color="#008888",
+        main_frame = ctk.CTkFrame(
+            self,
+            fg_color=COLORS["surface"],
+            corner_radius=16,
+            border_width=1,
+            border_color=COLORS["border"],
         )
-        btn_search.pack(side="right", padx=5)
+        main_frame.pack(fill="both", expand=True, padx=28, pady=(0, 14))
 
-        # Main Content
-        main_frame = ctk.CTkFrame(self, fg_color="transparent")
-        main_frame.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+        left_frame = ctk.CTkFrame(
+            main_frame,
+            width=292,
+            fg_color=COLORS["surface"],
+            corner_radius=16,
+        )
+        left_frame.pack(side="left", fill="y", padx=(1, 0), pady=1)
+        left_frame.pack_propagate(False)
 
-        # Left pane (Listbox)
-        left_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
-        left_frame.pack(side="left", fill="y", padx=(0, 10))
+        list_header = ctk.CTkFrame(left_frame, fg_color="transparent")
+        list_header.pack(fill="x", padx=20, pady=(20, 10))
+        ctk.CTkLabel(
+            list_header,
+            text="NOTES",
+            font=("DejaVu Sans", 12, "bold"),
+            text_color=COLORS["muted"],
+        ).pack(side="left")
+        self.note_count = ctk.CTkLabel(
+            list_header,
+            text="0",
+            width=28,
+            height=22,
+            corner_radius=11,
+            fg_color=COLORS["elevated"],
+            text_color=COLORS["cyan"],
+            font=("DejaVu Sans Mono", 11, "bold"),
+        )
+        self.note_count.pack(side="right")
+
+        search = ctk.CTkEntry(
+            left_frame,
+            placeholder_text="Search notes…",
+            height=38,
+            corner_radius=9,
+            fg_color=COLORS["abyss"],
+            border_color=COLORS["border"],
+            text_color=COLORS["text"],
+            placeholder_text_color=COLORS["muted"],
+        )
+        search.pack(fill="x", padx=16, pady=(0, 12))
+        search.bind("<Return>", lambda _event: self._cmd_search(search.get()))
 
         self.listbox = ctk.CTkTextbox(
             left_frame,
-            width=250,
-            font=("Consolas", 14),
-            fg_color="#0a192f",
-            text_color=self.neon_cyan,
-            border_color=self.neon_cyan,
-            border_width=2,
+            width=260,
+            font=("DejaVu Sans", 13),
+            fg_color=COLORS["surface"],
+            text_color=COLORS["text"],
+            border_width=0,
+            corner_radius=0,
+            spacing1=7,
+            spacing3=7,
         )
-        self.listbox.pack(side="left", fill="both", expand=True)
-        # We will use this as a clickable list by binding tags
+        self.listbox.pack(fill="both", expand=True, padx=12, pady=(0, 14))
         self.listbox.bind("<Button-1>", self._on_list_click)
         self.listbox.configure(state="disabled")
 
-        # Right pane (Editor)
-        right_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
-        right_frame.pack(side="right", fill="both", expand=True)
+        right_frame = ctk.CTkFrame(
+            main_frame,
+            fg_color=COLORS["elevated"],
+            corner_radius=15,
+        )
+        right_frame.pack(side="right", fill="both", expand=True, padx=(0, 1), pady=1)
+
+        editor_header = ctk.CTkFrame(right_frame, fg_color="transparent")
+        editor_header.pack(fill="x", padx=30, pady=(26, 8))
+        ctk.CTkLabel(
+            editor_header,
+            text="EDITOR",
+            font=("DejaVu Sans", 11, "bold"),
+            text_color=COLORS["muted"],
+        ).pack(side="left")
+        ctk.CTkLabel(
+            editor_header,
+            text="Ctrl+S to save",
+            font=("DejaVu Sans Mono", 10),
+            text_color=COLORS["muted"],
+        ).pack(side="right")
 
         self.title_entry = ctk.CTkEntry(
             right_frame,
-            font=("Helvetica", 16, "bold"),
-            fg_color="#0a192f",
-            text_color=self.terminal_green,
-            border_color=self.neon_cyan,
-            border_width=2,
+            placeholder_text="Untitled note",
+            height=52,
+            font=("DejaVu Sans", 24, "bold"),
+            fg_color="transparent",
+            text_color=COLORS["text"],
+            placeholder_text_color=COLORS["muted"],
+            border_width=0,
         )
-        self.title_entry.pack(side="top", fill="x", pady=(0, 10))
+        self.title_entry.pack(side="top", fill="x", padx=24, pady=(0, 4))
 
         self.body_text = ctk.CTkTextbox(
             right_frame,
-            font=("Consolas", 14),
-            fg_color="#0a192f",
-            text_color=self.terminal_green,
-            border_color=self.neon_cyan,
-            border_width=2,
+            font=("DejaVu Sans", 15),
+            fg_color="transparent",
+            text_color=COLORS["text"],
+            border_width=0,
+            corner_radius=0,
+            wrap="word",
+            spacing1=3,
+            spacing3=3,
         )
-        self.body_text.pack(side="top", fill="both", expand=True)
+        self.body_text.pack(
+            side="top", fill="both", expand=True, padx=30, pady=(0, 24)
+        )
 
         self.body_text.bind("<KeyPress>", self._on_key_press)
         self.title_entry.bind("<KeyPress>", self._on_key_press)
 
-        # Status Bar
         self.status_var = StringVar()
-        status_bar = ctk.CTkLabel(
-            self,
+        status_bar = ctk.CTkFrame(self, fg_color="transparent")
+        status_bar.pack(side="bottom", fill="x", padx=28, pady=(0, 14))
+        ctk.CTkLabel(
+            status_bar,
+            text="●",
+            text_color=COLORS["cyan"],
+            font=("DejaVu Sans", 10),
+        ).pack(side="left")
+        ctk.CTkLabel(
+            status_bar,
             textvariable=self.status_var,
             anchor="w",
-            text_color=self.neon_cyan,
-            font=("Consolas", 12),
-        )
-        status_bar.pack(side="bottom", fill="x", padx=10, pady=(0, 5))
-
-        # Canvas for Overlay Animations
+            text_color=COLORS["muted"],
+            font=("DejaVu Sans", 11),
+        ).pack(side="left", padx=(7, 0))
+        ctk.CTkLabel(
+            status_bar,
+            text="LOCAL  /  ENCRYPTED",
+            text_color=COLORS["muted"],
+            font=("DejaVu Sans Mono", 10),
+        ).pack(side="right")
 
         self.overlay = Canvas(self, bg=self.abyssal_black, highlightthickness=0)
         self.overlay.place(x=0, y=0, relwidth=1, relheight=1)
-        tk.Misc.lower(self.overlay)  # Hide it initially by pushing it back
+        tk.Misc.lower(self.overlay)
+
+        self.bind("<Control-s>", lambda _event: self.save_current_note())
+        self.bind("<Control-n>", lambda _event: self.add_note())
 
     def _on_key_press(self, event):  # pylint: disable=unused-argument
         if self.keyboard_sound_enabled.get():
             play_sound("keyboard_click")
 
     def _refresh_list(self):
+        notes = self.vault.get("notes", [])
+        self.note_count.configure(text=str(len(notes)))
         self.listbox.configure(state="normal")
         self.listbox.delete("1.0", "end")
-        for i, note in enumerate(self.vault.get("notes", [])):
+        if not notes:
+            self.listbox.insert("end", "  No notes yet\n  Create one to begin.")
+        for i, note in enumerate(notes):
             title = note.get("title", "(untitled)")
             if "password_hash" in note:
-                title += " (Locked)"
-            self.listbox.insert("end", f"{i+1}. {title}\n")
+                title = f"◆  {title}"
+            else:
+                title = f"·  {title}"
+            self.listbox.insert("end", f"  {title}\n")
         self.listbox.configure(state="disabled")
 
     def _on_list_click(self, event):
@@ -229,6 +368,7 @@ class TsunamiGUI(ctk.CTk):
                     messagebox.showerror("Error", "Incorrect note password.")
                     return
             self.current_index = line_num
+            self.status_var.set(f"Editing · {note.get('title', 'Untitled')}")
             self.title_entry.delete(0, "end")
             self.title_entry.insert(0, note.get("title", ""))
             self.body_text.delete("1.0", "end")
@@ -360,8 +500,9 @@ class TsunamiGUI(ctk.CTk):
         play_sound("zelda_secret")
         self.save_vault_fn(self.vault_path, self.password, self.vault)
 
-    def _cmd_search(self):
-        query = simpledialog.askstring("Search", "Enter keyword:")
+    def _cmd_search(self, query=None):
+        if query is None:
+            query = simpledialog.askstring("Search", "Enter keyword:")
         if query:
             results = []
             notes = self.vault.get("notes", [])
