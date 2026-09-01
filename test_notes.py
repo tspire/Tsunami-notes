@@ -1,6 +1,5 @@
 """Tests for Tsunami Notes encryption and note management logic."""
 
-import asyncio
 import os
 import tempfile
 import unittest
@@ -26,15 +25,12 @@ from tsunami_notes.notes import (
 from tsunami_notes.tui import TsunamiTUI
 
 
-class TestTUI(unittest.TestCase):
-    def test_footer_has_room_for_hotkey_tips(self):
-        async def check_footer():
-            app = TsunamiTUI({"notes": []}, "/tmp/vault", "pw", lambda *args: None)
-            async with app.run_test(size=(100, 30)):
-                footer = app.query_one(Footer)
-                self.assertGreater(footer.content_region.height, 0)
-
-        asyncio.run(check_footer())
+class TestTUI(unittest.IsolatedAsyncioTestCase):
+    async def test_footer_has_room_for_hotkey_tips(self):
+        app = TsunamiTUI({"notes": []}, "/tmp/vault", "pw", lambda *args: None)
+        async with app.run_test(size=(100, 30)):
+            footer = app.query_one(Footer)
+            self.assertGreater(footer.content_region.height, 0)
 
 
 class TestCrypto(unittest.TestCase):
