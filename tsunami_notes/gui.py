@@ -1,6 +1,7 @@
 """GUI implementation for Tsunami Notes."""
 
 # pylint: disable=import-error, too-many-instance-attributes, broad-exception-caught
+# pylint: disable=too-many-locals, too-many-statements
 
 import os
 import hashlib
@@ -294,9 +295,7 @@ class TsunamiGUI(ctk.CTk):
             spacing1=3,
             spacing3=3,
         )
-        self.body_text.pack(
-            side="top", fill="both", expand=True, padx=30, pady=(0, 24)
-        )
+        self.body_text.pack(side="top", fill="both", expand=True, padx=30, pady=(0, 24))
 
         self.body_text.bind("<KeyPress>", self._on_key_press)
         self.title_entry.bind("<KeyPress>", self._on_key_press)
@@ -342,7 +341,7 @@ class TsunamiGUI(ctk.CTk):
         self.listbox.delete("1.0", "end")
         if not notes:
             self.listbox.insert("end", "  No notes yet\n  Create one to begin.")
-        for i, note in enumerate(notes):
+        for note in notes:
             title = note.get("title", "(untitled)")
             if "password_hash" in note:
                 title = f"◆  {title}"
