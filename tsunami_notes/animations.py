@@ -186,7 +186,7 @@ def _transfer_frame(  # pylint: disable=too-many-locals
     progress = frame / max(1, total - 1)
     packet = left + int(progress * (right - left))
     canvas[y_pos][packet] = "●"
-    if y_pos > 0:
+    if y_pos > 1:
         label = f" {int(progress * 100):3d}% "
         start = max(0, width // 2 - len(label) // 2)
         canvas[y_pos - 2][start : start + len(label)] = label
@@ -200,8 +200,8 @@ def _lock_frame(  # pylint: disable=too-many-locals
     center_x, center_y = width // 2, height // 2
     unlocked = frame < total // 2
     lock = [
-        "  ╭─────╮  " if not unlocked else "  ╭─────╮  ",
-        "  │     │  " if not unlocked else "  │        ",
+        "      ╭───╮" if unlocked else "  ╭─────╮  ",
+        "      │    " if unlocked else "  │     │  ",
         "╭─┴─────┴─╮",
         "│    ◆    │",
         "╰─────────╯",
