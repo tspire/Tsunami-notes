@@ -94,78 +94,144 @@ class NoteEditorScreen(ModalScreen[dict]):
 class TsunamiTUI(App):
     """A Textual app for Tsunami Notes."""
 
+    TITLE = "TSUNAMI NOTES"
+    SUB_TITLE = "Private encrypted vault"
+
     CSS = """
     Screen {
-        background: #050a0f;
-        color: #00ffff;
+        background: #07111f;
+        color: #e7f4fa;
     }
     Header {
-        background: #0a192f;
-        color: #00ff00;
+        background: #0b1829;
+        color: #e7f4fa;
+        border-bottom: solid #1d3a55;
     }
     Footer {
-        background: #0a192f;
-        color: #00ff00;
+        background: #0b1829;
+        color: #7892a8;
+        border-top: solid #1d3a55;
+    }
+    #workspace {
+        height: 1fr;
+        padding: 1 2;
+    }
+    #sidebar-pane {
+        width: 34;
+        min-width: 24;
+        margin-right: 2;
+        background: #0b1829;
+        border: round #1d3a55;
+    }
+    #brand {
+        padding: 1 2 0 2;
+        color: #36d6d0;
+        text-style: bold;
+    }
+    #vault-label {
+        padding: 0 2 1 2;
+        color: #7892a8;
+    }
+    #notes-label {
+        padding: 1 2 0 2;
+        color: #7892a8;
+        text-style: bold;
     }
     #sidebar {
-        width: 30;
-        background: #050a0f;
-        border-right: vkey #00ffff;
+        height: 1fr;
+        padding: 0 1 1 1;
+        background: #0b1829;
+        border: none;
     }
     ListItem {
-        color: #00ffff;
+        height: 3;
+        padding: 1;
+        color: #b8cad6;
     }
     ListItem.--highlight {
-        background: #00ffff 20%;
-        color: #00ff00;
+        background: #16324b;
+        color: #e7f4fa;
+        text-style: bold;
     }
-    Markdown {
-        background: #0a0f18;
-        color: #00ffff;
-        border-left: vkey #00ffff;
-        padding: 1 2;
+    #content-pane {
+        width: 1fr;
+        background: #102238;
+        border: round #1d3a55;
+    }
+    #content-kicker {
+        height: 3;
+        padding: 1 2 0 2;
+        color: #7892a8;
+        text-style: bold;
+    }
+    #content {
+        height: 1fr;
+        background: #102238;
+        color: #e7f4fa;
+        padding: 1 3 2 3;
+        scrollbar-color: #36d6d0;
+        scrollbar-background: #0b1829;
+    }
+    PasswordScreen, DeleteConfirmScreen, NoteEditorScreen {
+        align: center middle;
+        background: #07111f 80%;
     }
     #dialog {
-        padding: 1 2;
-        width: 40;
+        padding: 1 2 2 2;
+        width: 48;
         height: auto;
-        border: thick #00ffff;
-        background: #0a192f;
-        align: center middle;
+        border: round #36d6d0;
+        background: #102238;
     }
     #editor {
-        padding: 1 2;
-        width: 80%;
+        padding: 1 2 2 2;
+        width: 76;
         height: 80%;
-        border: thick #00ffff;
-        background: #0a192f;
+        border: round #36d6d0;
+        background: #102238;
     }
     #body_input {
         height: 1fr;
-        background: #050a0f;
-        color: #00ff00;
-        border: solid #00ffff;
+        margin-bottom: 1;
+        background: #07111f;
+        color: #e7f4fa;
+        border: round #1d3a55;
     }
     #title_input {
-        background: #050a0f;
-        color: #00ff00;
-        border: solid #00ffff;
+        margin-bottom: 1;
+        background: #07111f;
+        color: #e7f4fa;
+        border: round #1d3a55;
     }
     Button {
-        background: #004444;
-        color: #00ffff;
+        min-width: 12;
+        margin: 1 1 0 0;
+        background: #16324b;
+        color: #e7f4fa;
         border: none;
     }
     Button:hover {
-        background: #008888;
+        background: #205071;
     }
     Button.-success {
-        background: #004400;
-        color: #00ff00;
+        background: #197d79;
+        color: #ffffff;
     }
     Button.-error {
-        background: #440000;
-        color: #ff0000;
+        background: #9e4450;
+        color: #ffffff;
+    }
+    Button.-primary {
+        background: #197d79;
+        color: #ffffff;
+    }
+    Input {
+        background: #07111f;
+        color: #e7f4fa;
+        border: round #1d3a55;
+    }
+    Input:focus, TextArea:focus {
+        border: round #36d6d0;
     }
     """
 
@@ -192,10 +258,16 @@ class TsunamiTUI(App):
 
     def compose(self) -> ComposeResult:
         """Create child widgets for the app."""
-        yield Header()
-        with Horizontal():
-            yield ListView(id="sidebar")
-            yield Markdown("", id="content")
+        yield Header(show_clock=True)
+        with Horizontal(id="workspace"):
+            with Vertical(id="sidebar-pane"):
+                yield Label("≋  TSUNAMI", id="brand")
+                yield Label("LOCAL / ENCRYPTED", id="vault-label")
+                yield Label("NOTES", id="notes-label")
+                yield ListView(id="sidebar")
+            with Vertical(id="content-pane"):
+                yield Label("NOTE PREVIEW", id="content-kicker")
+                yield Markdown("", id="content")
         yield Footer()
 
     def on_key(self, event: Key) -> None:  # pylint: disable=unused-argument
@@ -228,7 +300,10 @@ class TsunamiTUI(App):
             self._update_preview()
         else:
             self.current_note_index = None
-            self.query_one("#content", Markdown).update("")
+            self.query_one("#content", Markdown).update(
+                "# Your vault is quiet\n\n"
+                "Create a note with **c** to capture your first thought."
+            )
 
     def _update_preview(self) -> None:
         """Update the markdown preview area."""
@@ -239,9 +314,15 @@ class TsunamiTUI(App):
             md = self.query_one("#content", Markdown)
             if "password_hash" in note:
                 if not note.get("_unlocked", False):
-                    md.update("*This note is password protected. Press 'u' to unlock.*")
+                    md.update(
+                        "# Protected note\n\n"
+                        "This note is encrypted behind an additional password.\n\n"
+                        "Press **u** to unlock it."
+                    )
                     return
-            md.update(note.get("body", ""))
+            title = note.get("title", "Untitled")
+            body = note.get("body", "")
+            md.update(f"# {title}\n\n{body}")
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         """Handle note selection."""
