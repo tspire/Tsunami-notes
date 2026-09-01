@@ -108,6 +108,7 @@ class TsunamiTUI(App):
         border-bottom: solid #1d3a55;
     }
     Footer {
+        height: 2;
         background: #0b1829;
         color: #7892a8;
         border-top: solid #1d3a55;
