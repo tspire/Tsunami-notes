@@ -196,7 +196,9 @@ def add_note(
         note["read_limit"] = read_limit
     if password is not None:
         salt = os.urandom(16).hex()
-        h = hashlib.sha256((salt + password).encode()).hexdigest()
+        h = hashlib.pbkdf2_hmac(
+            "sha256", password.encode(), salt.encode(), 100000
+        ).hex()
         note["password_hash"] = f"{salt}:{h}"
     vault.setdefault("notes", []).append(note)
     play_fullscreen_anim("add", f"Note '{title}' added.")
@@ -207,7 +209,7 @@ def _check_note_password(note: dict) -> bool:
         return True
     pwd = _prompt_password(prompt="Note is password protected. Password: ")
     salt, h = note["password_hash"].split(":")
-    if hashlib.sha256((salt + pwd).encode()).hexdigest() == h:
+    if hashlib.pbkdf2_hmac("sha256", pwd.encode(), salt.encode(), 100000).hex() == h:
         return True
     console.print("[bold red]Incorrect password.[/bold red]")
     return False
@@ -284,7 +286,9 @@ def edit_note(
             notes[index - 1].pop("password_hash", None)
         else:
             salt = os.urandom(16).hex()
-            h = hashlib.sha256((salt + password).encode()).hexdigest()
+            h = hashlib.pbkdf2_hmac(
+                "sha256", password.encode(), salt.encode(), 100000
+            ).hex()
             notes[index - 1]["password_hash"] = f"{salt}:{h}"
     play_fullscreen_anim("edit", f"Note {index} updated.")
     return True

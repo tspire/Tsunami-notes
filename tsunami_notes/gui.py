@@ -345,7 +345,9 @@ class TsunamiGUI(ctk.CTk):
                     messagebox.showinfo("Success", "Note password removed.")
                 else:
                     salt = os.urandom(16).hex()
-                    h = hashlib.sha256((salt + pwd).encode()).hexdigest()
+                    h = hashlib.pbkdf2_hmac(
+                        "sha256", pwd.encode(), salt.encode(), 100000
+                    ).hex()
                     note["password_hash"] = f"{salt}:{h}"
                     messagebox.showinfo("Success", "Note password set.")
                 self._save_vault()
