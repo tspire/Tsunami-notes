@@ -3,7 +3,7 @@
 import os
 import tempfile
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 from tsunami_notes import animations
 from tsunami_notes.notes import (
@@ -226,9 +226,7 @@ class TestAnimations(unittest.TestCase):
             animations.play_fullscreen_anim("add", "Note added.")
 
         live.assert_not_called()
-        print_result.assert_called_once_with(
-            "[bold green]✓[/bold green] Note added."
-        )
+        print_result.assert_called_once_with("[bold green]✓[/bold green] Note added.")
 
     def test_animation_can_be_disabled_with_environment_variable(self):
         stdout = Mock()
@@ -243,7 +241,7 @@ class TestAnimations(unittest.TestCase):
             self.assertFalse(animations._animations_enabled())
 
     def test_tty_plays_frames_and_keeps_result_visible(self):
-        live = Mock()
+        live = MagicMock()
         live.return_value.__enter__.return_value = live_instance = Mock()
         with (
             patch.object(animations, "_animations_enabled", return_value=True),

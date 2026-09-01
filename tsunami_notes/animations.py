@@ -71,23 +71,25 @@ def _print_result(message: str) -> None:
 
 
 def _animation_for(command: str) -> tuple[FrameBuilder, str]:
-    if command == "add":
-        return _wave_frame, "cyan"
-    if command in {"edit", "update"}:
-        return _matrix_frame, "green"
-    if command in {"trash", "delete", "empty-trash"}:
-        return _vortex_frame, "red"
-    if command == "restore":
-        return _restore_frame, "cyan"
-    if command in {"export", "import"}:
-        return _transfer_frame, "magenta"
-    if command == "passwd":
-        return _lock_frame, "green"
-    if command == "duress":
-        return _smoke_frame, "white"
-    if command in {"list", "search", "show", "list-trash", "view"}:
-        return _sonar_frame, "green"
-    return _pulse_frame, "cyan"
+    animations = {
+        "add": (_wave_frame, "cyan"),
+        "edit": (_matrix_frame, "green"),
+        "update": (_matrix_frame, "green"),
+        "trash": (_vortex_frame, "red"),
+        "delete": (_vortex_frame, "red"),
+        "empty-trash": (_vortex_frame, "red"),
+        "restore": (_restore_frame, "cyan"),
+        "export": (_transfer_frame, "magenta"),
+        "import": (_transfer_frame, "magenta"),
+        "passwd": (_lock_frame, "green"),
+        "duress": (_smoke_frame, "white"),
+        "list": (_sonar_frame, "green"),
+        "search": (_sonar_frame, "green"),
+        "show": (_sonar_frame, "green"),
+        "list-trash": (_sonar_frame, "green"),
+        "view": (_sonar_frame, "green"),
+    }
+    return animations.get(command, (_pulse_frame, "cyan"))
 
 
 def _canvas(width: int, height: int) -> list[list[str]]:
@@ -169,7 +171,9 @@ def _restore_frame(width: int, height: int, frame: int, total: int) -> Text:
     return _text_canvas(canvas, "bold cyan")
 
 
-def _transfer_frame(width: int, height: int, frame: int, total: int) -> Text:
+def _transfer_frame(  # pylint: disable=too-many-locals
+    width: int, height: int, frame: int, total: int
+) -> Text:
     canvas = _canvas(width, height)
     left, right = width // 4, width * 3 // 4
     y_pos = height // 2
@@ -189,7 +193,9 @@ def _transfer_frame(width: int, height: int, frame: int, total: int) -> Text:
     return _text_canvas(canvas, "bold magenta")
 
 
-def _lock_frame(width: int, height: int, frame: int, total: int) -> Text:
+def _lock_frame(  # pylint: disable=too-many-locals
+    width: int, height: int, frame: int, total: int
+) -> Text:
     canvas = _canvas(width, height)
     center_x, center_y = width // 2, height // 2
     unlocked = frame < total // 2
