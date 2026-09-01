@@ -3,7 +3,9 @@
 import os
 import tempfile
 import unittest
+from unittest.mock import Mock, patch
 
+from tsunami_notes import animations
 from tsunami_notes.notes import (
     _derive_key,
     _encrypt,
@@ -193,7 +195,6 @@ class TestNoteOperations(unittest.TestCase):
 
     def test_search_notes(self):
         from tsunami_notes.notes import search_notes
-        from unittest.mock import patch
         import io
 
         v = self._vault()
@@ -213,6 +214,52 @@ class TestNoteOperations(unittest.TestCase):
         with patch("sys.stdout", new_callable=io.StringIO) as mock_stdout:
             search_notes(v, "xyz")
             self.assertIn("No matching notes found", mock_stdout.getvalue())
+
+
+class TestAnimations(unittest.TestCase):
+    def test_non_interactive_output_skips_animation(self):
+        with (
+            patch.object(animations, "_animations_enabled", return_value=False),
+            patch.object(animations.console, "print") as print_result,
+            patch.object(animations, "Live") as live,
+        ):
+            animations.play_fullscreen_anim("add", "Note added.")
+
+        live.assert_not_called()
+        print_result.assert_called_once_with(
+            "[bold green]✓[/bold green] Note added."
+        )
+
+    def test_animation_can_be_disabled_with_environment_variable(self):
+        stdout = Mock()
+        stdout.isatty.return_value = True
+        with (
+            patch.dict(
+                animations.os.environ,
+                {"TERM": "xterm-256color", "TSUNAMI_ANIMATIONS": "off"},
+            ),
+            patch.object(animations.sys, "stdout", stdout),
+        ):
+            self.assertFalse(animations._animations_enabled())
+
+    def test_tty_plays_frames_and_keeps_result_visible(self):
+        live = Mock()
+        live.return_value.__enter__.return_value = live_instance = Mock()
+        with (
+            patch.object(animations, "_animations_enabled", return_value=True),
+            patch.object(
+                animations.shutil,
+                "get_terminal_size",
+                return_value=os.terminal_size((20, 8)),
+            ),
+            patch.object(animations, "Live", live),
+            patch.object(animations.time, "sleep"),
+            patch.object(animations.console, "print") as print_result,
+        ):
+            animations.play_fullscreen_anim("search", "Found.")
+
+        self.assertEqual(live_instance.update.call_count, animations._FRAME_COUNT + 1)
+        print_result.assert_called_once_with("[bold green]✓[/bold green] Found.")
 
 
 if __name__ == "__main__":

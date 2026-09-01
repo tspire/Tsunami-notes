@@ -121,6 +121,8 @@ tsunami <command> [options]
 
 On first run a new vault is created after prompting you to set a master password.
 On subsequent runs you are prompted for the existing master password.
+Commands use short, command-specific terminal animations. Set
+`TSUNAMI_ANIMATIONS=off` to disable them, including for reduced-motion setups.
 
 #### Commands
 
