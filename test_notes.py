@@ -4,6 +4,8 @@ import os
 import tempfile
 import unittest
 
+from textual.widgets import Footer
+
 from tsunami_notes.notes import (
     _derive_key,
     _encrypt,
@@ -20,6 +22,15 @@ from tsunami_notes.notes import (
     export_vault,
     import_vault,
 )
+from tsunami_notes.tui import TsunamiTUI
+
+
+class TestTUI(unittest.IsolatedAsyncioTestCase):
+    async def test_footer_has_room_for_hotkey_tips(self):
+        app = TsunamiTUI({"notes": []}, "/tmp/vault", "pw", lambda *args: None)
+        async with app.run_test(size=(100, 30)):
+            footer = app.query_one(Footer)
+            self.assertGreater(footer.content_region.height, 0)
 
 
 class TestCrypto(unittest.TestCase):
