@@ -16,6 +16,8 @@ from textual.widgets import (
     TextArea,
     Button,
 )
+from textual.events import Key
+from .audio import play_sound
 
 
 class PasswordScreen(ModalScreen[bool]):
@@ -95,23 +97,77 @@ class TsunamiTUI(App):
     """A Textual app for Tsunami Notes."""
 
     CSS = """
+    Screen {
+        background: #050a0f;
+        color: #00ffff;
+    }
+    Header {
+        background: #0a192f;
+        color: #00ff00;
+    }
+    Footer {
+        background: #0a192f;
+        color: #00ff00;
+    }
+    #sidebar {
+        width: 30;
+        background: #050a0f;
+        border-right: vkey #00ffff;
+    }
+    ListItem {
+        color: #00ffff;
+    }
+    ListItem.--highlight {
+        background: #00ffff 20%;
+        color: #00ff00;
+    }
+    Markdown {
+        background: #0a0f18;
+        color: #00ffff;
+        border-left: vkey #00ffff;
+        padding: 1 2;
+    }
     #dialog {
         padding: 1 2;
         width: 40;
         height: auto;
-        border: thick $background 80%;
-        background: $surface;
+        border: thick #00ffff;
+        background: #0a192f;
         align: center middle;
     }
     #editor {
         padding: 1 2;
         width: 80%;
         height: 80%;
-        border: thick $background 80%;
-        background: $surface;
+        border: thick #00ffff;
+        background: #0a192f;
     }
     #body_input {
         height: 1fr;
+        background: #050a0f;
+        color: #00ff00;
+        border: solid #00ffff;
+    }
+    #title_input {
+        background: #050a0f;
+        color: #00ff00;
+        border: solid #00ffff;
+    }
+    Button {
+        background: #004444;
+        color: #00ffff;
+        border: none;
+    }
+    Button:hover {
+        background: #008888;
+    }
+    Button.-success {
+        background: #004400;
+        color: #00ff00;
+    }
+    Button.-error {
+        background: #440000;
+        color: #ff0000;
     }
     """
 
@@ -143,6 +199,10 @@ class TsunamiTUI(App):
             yield ListView(id="sidebar")
             yield Markdown("", id="content")
         yield Footer()
+
+    def on_key(self, event: Key) -> None:  # pylint: disable=unused-argument
+        """Play click sound on every keystroke."""
+        play_sound("keyboard_click")
 
     def on_mount(self) -> None:
         """Setup after mounting."""
@@ -253,6 +313,7 @@ class TsunamiTUI(App):
 
     def save_vault(self) -> None:
         """Persist vault changes to disk."""
+        play_sound("zelda_secret")
         self.save_func(self.vault_path, self.password, self.vault)
 
 
