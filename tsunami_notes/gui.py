@@ -3,6 +3,7 @@
 # pylint: disable=import-error, too-many-instance-attributes, broad-exception-caught
 
 import os
+import hashlib
 import json
 import random
 import time
@@ -111,6 +112,16 @@ class TsunamiGUI(ctk.CTk):
         )
         btn_save.pack(side="left", padx=5)
 
+        btn_protect = ctk.CTkButton(
+            toolbar,
+            text="Protect",
+            command=self.protect_current_note,
+            fg_color="#444400",
+            text_color="#ffff00",
+            hover_color="#888800",
+        )
+        btn_protect.pack(side="left", padx=5)
+
         btn_search = ctk.CTkButton(
             toolbar,
             text="Search",
@@ -196,6 +207,8 @@ class TsunamiGUI(ctk.CTk):
         self.listbox.delete("1.0", "end")
         for i, note in enumerate(self.vault.get("notes", [])):
             title = note.get("title", "(untitled)")
+            if "password_hash" in note:
+                title += " (Locked)"
             self.listbox.insert("end", f"{i+1}. {title}\n")
         self.listbox.configure(state="disabled")
 
@@ -204,8 +217,18 @@ class TsunamiGUI(ctk.CTk):
         line_num = int(index.split(".")[0]) - 1
         notes = self.vault.get("notes", [])
         if 0 <= line_num < len(notes):
-            self.current_index = line_num
             note = notes[line_num]
+            if "password_hash" in note:
+                pwd = simpledialog.askstring(
+                    "Note Password", "Enter password for this note:", show="*"
+                )
+                if not pwd:
+                    return
+                salt, h = note["password_hash"].split(":")
+                if hashlib.sha256((salt + pwd).encode()).hexdigest() != h:
+                    messagebox.showerror("Error", "Incorrect note password.")
+                    return
+            self.current_index = line_num
             self.title_entry.delete(0, "end")
             self.title_entry.insert(0, note.get("title", ""))
             self.body_text.delete("1.0", "end")
@@ -308,6 +331,25 @@ class TsunamiGUI(ctk.CTk):
             note["body"] = new_body
             self._save_vault(anim="save")
             self._refresh_list()
+
+    def protect_current_note(self):
+        """Protect or unprotect the current note."""
+        if self.current_index is not None:
+            note = self.vault["notes"][self.current_index]
+            pwd = simpledialog.askstring(
+                "Protect Note", "Enter new password (leave empty to remove):", show="*"
+            )
+            if pwd is not None:
+                if pwd == "":
+                    note.pop("password_hash", None)
+                    messagebox.showinfo("Success", "Note password removed.")
+                else:
+                    salt = os.urandom(16).hex()
+                    h = hashlib.sha256((salt + pwd).encode()).hexdigest()
+                    note["password_hash"] = f"{salt}:{h}"
+                    messagebox.showinfo("Success", "Note password set.")
+                self._save_vault()
+                self._refresh_list()
             self.status_var.set("Note saved.")
 
     def _save_vault(self, anim=None):
