@@ -90,7 +90,8 @@ def set_duress_password(vault_path: str, password: str) -> None:
     salt = os.urandom(32)
     key = crypto.derive_key(password, salt)
     meta_path = vault_path + ".meta"
-    with open(meta_path, "w", encoding="utf-8") as f:
+    fd = os.open(meta_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
         json.dump(
             {
                 "duress_salt": salt.hex(),

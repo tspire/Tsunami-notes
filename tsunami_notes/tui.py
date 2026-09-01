@@ -165,6 +165,7 @@ class TsunamiTUI(App):
             self.exit()
 
     async def on_event(self, event: events.Event) -> None:
+        """Reset activity timer on user interaction."""
         if isinstance(event, (events.Key, events.MouseMove, events.MouseDown)):
             self.last_activity = time.time()
         await super().on_event(event)

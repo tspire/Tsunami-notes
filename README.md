@@ -9,7 +9,7 @@ Private, secure, and encrypted notes app for Ubuntu, written in Python.
 - **Fresh salt & nonce** on every save — re-encrypts the vault from scratch each time.
 - **Atomic writes** — the vault file is replaced atomically to prevent corruption.
 - **Restrictive permissions** — vault file is saved as `0600` (owner read/write only).
-- **Dual Interface** — Simple **CLI** interface for the terminal, or a modern **GUI** with native OS styling.
+- **Multiple Interfaces** — Simple **CLI** interface for the terminal, a modern **GUI** with native OS styling, or a rich **TUI** for the terminal.
 - **GUI Features**:
   - Native OS theming with themed widgets (ttk)
   - Scrollbars for notes list and editor
@@ -98,6 +98,14 @@ tsunami gui
 
 Launch the graphical interface with a notes list, editor, native menu, and status bar.
 
+### TUI
+
+```bash
+tsunami tui
+```
+
+Launch the Textual-based terminal UI.
+
 ### CLI
 
 ```bash
@@ -116,6 +124,15 @@ On subsequent runs you are prompted for the existing master password.
 | `view <index>` | Display a note |
 | `edit <index> [--title T] [--body B]` | Edit a note |
 | `delete <index>` | Delete a note |
+| `search <query>` | Search note titles and bodies |
+| `export <path>` | Export vault to a JSON file |
+| `import <path>` | Import notes from a JSON file |
+| `trash` | Manage deleted notes (list/restore/empty) |
+| `revisions` | Manage note revisions (list/view/rollback) |
+| `passwd` | Change the master password |
+| `gui` | Launch the Graphical UI |
+| `tui` | Launch the Textual UI |
+| `interactive` | Enter an interactive shell mode |
 
 #### Examples
 

@@ -185,7 +185,7 @@ class TsunamiGUI(tk.Tk):
     def _on_focus_mode_toggle(self):
         from .audio import (
             stop_focus_mode,
-        )  # pylint: disable=import-outside-toplevel  # pylint: disable=import-outside-toplevel
+        )  # pylint: disable=import-outside-toplevel
 
         if not self.focus_mode_enabled.get():
             stop_focus_mode()
@@ -228,7 +228,7 @@ class TsunamiGUI(tk.Tk):
     def _stop_typing(self):
         from .audio import (
             stop_focus_mode,
-        )  # pylint: disable=import-outside-toplevel  # pylint: disable=import-outside-toplevel
+        )  # pylint: disable=import-outside-toplevel
 
         self.is_typing = False
         stop_focus_mode()
