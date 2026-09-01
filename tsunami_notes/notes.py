@@ -3,6 +3,7 @@
 import argparse
 import json
 import os
+import hashlib
 import re
 import shlex
 import subprocess
@@ -183,6 +184,7 @@ def add_note(
     tags: list[str] | None = None,
     ttl: int | None = None,
     read_limit: int | None = None,
+    password: str | None = None,
 ) -> None:
     """Append a new note with *title* and *body* to *vault*."""
     note = {"title": title, "body": body}
@@ -192,8 +194,25 @@ def add_note(
         note["expires_at"] = time.time() + ttl
     if read_limit is not None:
         note["read_limit"] = read_limit
+    if password is not None:
+        salt = os.urandom(16).hex()
+        h = hashlib.pbkdf2_hmac(
+            "sha256", password.encode(), salt.encode(), 100000
+        ).hex()
+        note["password_hash"] = f"{salt}:{h}"
     vault.setdefault("notes", []).append(note)
     play_fullscreen_anim("add", f"Note '{title}' added.")
+
+
+def _check_note_password(note: dict) -> bool:
+    if "password_hash" not in note:
+        return True
+    pwd = _prompt_password(prompt="Note is password protected. Password: ")
+    salt, h = note["password_hash"].split(":")
+    if hashlib.pbkdf2_hmac("sha256", pwd.encode(), salt.encode(), 100000).hex() == h:
+        return True
+    console.print("[bold red]Incorrect password.[/bold red]")
+    return False
 
 
 def view_note(vault: dict, index: int) -> bool:
@@ -205,6 +224,8 @@ def view_note(vault: dict, index: int) -> bool:
         )
         return False
     note = notes[index - 1]
+    if not _check_note_password(note):
+        return False
     title = note.get("title", "")
     body = note.get("body", "")
 
@@ -240,11 +261,15 @@ def edit_note(
     tags: list[str] | None = None,
     ttl: int | None = None,
     read_limit: int | None = None,
+    password: str | None = None,
+    auth_checked: bool = False,
 ) -> bool:
     """Update the title/body/tags/ttl/read_limit of the note at *index*; returns success."""
     notes = vault.get("notes", [])
     if not 1 <= index <= len(notes):
         console.print(f"[bold red]Error: note index {index} out of range.[/bold red]")
+        return False
+    if not auth_checked and not _check_note_password(notes[index - 1]):
         return False
     if title is not None:
         notes[index - 1]["title"] = title
@@ -256,6 +281,15 @@ def edit_note(
         notes[index - 1]["expires_at"] = time.time() + ttl
     if read_limit is not None:
         notes[index - 1]["read_limit"] = read_limit
+    if password is not None:
+        if password == "":
+            notes[index - 1].pop("password_hash", None)
+        else:
+            salt = os.urandom(16).hex()
+            h = hashlib.pbkdf2_hmac(
+                "sha256", password.encode(), salt.encode(), 100000
+            ).hex()
+            notes[index - 1]["password_hash"] = f"{salt}:{h}"
     play_fullscreen_anim("edit", f"Note {index} updated.")
     return True
 
@@ -265,6 +299,8 @@ def delete_note(vault: dict, index: int) -> bool:
     notes = vault.get("notes", [])
     if not 1 <= index <= len(notes):
         console.print(f"[bold red]Error: note index {index} out of range.[/bold red]")
+        return False
+    if not _check_note_password(notes[index - 1]):
         return False
     removed = notes.pop(index - 1)
     vault.setdefault("trash", []).append(removed)
@@ -378,6 +414,9 @@ def search_notes(
     for idx, note in enumerate(notes, start=1):
         title = note.get("title", "")
         body = note.get("body", "")
+        if "password_hash" in note:
+            body = ""
+            title = f"{title} (Locked)"
 
         match = False
         if fuzzy or use_regex:
@@ -434,6 +473,11 @@ def build_parser() -> argparse.ArgumentParser:
     add_p.add_argument(
         "--read-limit", type=int, help="Number of times this note can be read."
     )
+    add_p.add_argument(
+        "--password",
+        action="store_true",
+        help="Prompt for a password to protect this note.",
+    )
 
     view_p = sub.add_parser("view", help="View a note by index.")
     view_p.add_argument("index", type=int, help="1-based note index.")
@@ -447,6 +491,11 @@ def build_parser() -> argparse.ArgumentParser:
     edit_p.add_argument("--ttl", type=int, help="Time to live in seconds.")
     edit_p.add_argument(
         "--read-limit", type=int, help="Number of times this note can be read."
+    )
+    edit_p.add_argument(
+        "--password",
+        action="store_true",
+        help="Prompt to set/change note password (empty to remove).",
     )
 
     del_p = sub.add_parser("delete", help="Delete a note by index.")
@@ -535,7 +584,10 @@ def _run_command(args, vault, vault_path, password) -> tuple[bool, str]:
         tags = [t.strip() for t in args.tags.split(",")] if args.tags else None
         if tags is not None:
             tags = [t for t in tags if t]
-        add_note(vault, args.title, body, tags, args.ttl, args.read_limit)
+        pwd = None
+        if getattr(args, "password", False):
+            pwd = _prompt_password(confirm=True, prompt="Note password: ")
+        add_note(vault, args.title, body, tags, args.ttl, args.read_limit, pwd)
         modified = True
 
     elif args.command == "view":
@@ -544,15 +596,31 @@ def _run_command(args, vault, vault_path, password) -> tuple[bool, str]:
 
     elif args.command == "edit":
         body = args.body
+        notes = vault.get("notes", [])
+        if 1 <= args.index <= len(notes):
+            if not _check_note_password(notes[args.index - 1]):
+                return False, ""
         if body is None:
-            notes = vault.get("notes", [])
             if 1 <= args.index <= len(notes):
                 body = _edit_in_editor(notes[args.index - 1].get("body", ""))
         tags = [t.strip() for t in args.tags.split(",")] if args.tags else None
         if tags is not None:
             tags = [t for t in tags if t]
+        pwd = None
+        if getattr(args, "password", False):
+            pwd = _prompt_password(
+                confirm=True, prompt="New note password (empty to remove): "
+            )
         mod = edit_note(
-            vault, args.index, args.title, body, tags, args.ttl, args.read_limit
+            vault,
+            args.index,
+            args.title,
+            body,
+            tags,
+            args.ttl,
+            args.read_limit,
+            pwd,
+            auth_checked=True,
         )
         if mod:
             modified = True

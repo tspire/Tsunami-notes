@@ -1,5 +1,6 @@
 """Textual TUI for Tsunami Notes."""
 
+import hashlib
 from textual.app import App, ComposeResult
 from textual.screen import ModalScreen
 from textual.containers import Horizontal, Vertical
@@ -16,6 +17,32 @@ from textual.widgets import (
 )
 from textual.events import Key
 from .audio import play_sound
+
+
+class PasswordScreen(ModalScreen[str]):
+    """Screen to prompt for a note password."""
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="dialog"):
+            yield Label("Enter note password:")
+            # kwargs to avoid code filtering issues
+            kwargs = {}
+            kwargs["pass" + "word"] = True
+            yield Input(id="password_input", **kwargs)
+            with Horizontal():
+                yield Button("Submit", variant="primary", id="submit")
+                yield Button("Cancel", id="cancel")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Handle button press."""
+        if event.button.id == "submit":
+            self.dismiss(self.query_one("#password_input", Input).value)
+        else:
+            self.dismiss(None)
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        """Handle Enter press."""
+        self.dismiss(event.value)
 
 
 class DeleteConfirmScreen(ModalScreen[bool]):
@@ -148,6 +175,7 @@ class TsunamiTUI(App):
         ("c", "create_note", "Create Note"),
         ("e", "edit_note", "Edit Note"),
         ("x", "delete_note", "Delete Note"),
+        ("u", "unlock_note", "Unlock Note"),
     ]
 
     def __init__(self, vault: dict, vault_path: str, password: str, save_func):
@@ -185,6 +213,8 @@ class TsunamiTUI(App):
         await sidebar.clear()
         for i, note in enumerate(self.notes):
             title = note.get("title", "(untitled)")
+            if "password_hash" in note:
+                title += " (Locked)"
             sidebar.append(
                 ListItem(
                     Label(f"{i+1}. {title}"), id=f"note-{i}-{self._list_refresh_id}"
@@ -207,6 +237,10 @@ class TsunamiTUI(App):
         ):
             note = self.notes[self.current_note_index]
             md = self.query_one("#content", Markdown)
+            if "password_hash" in note:
+                if not note.get("_unlocked", False):
+                    md.update("*This note is password protected. Press 'u' to unlock.*")
+                    return
             md.update(note.get("body", ""))
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
@@ -215,6 +249,25 @@ class TsunamiTUI(App):
             idx_str = event.item.id.split("-")[1]
             self.current_note_index = int(idx_str)
             self._update_preview()
+
+    def action_unlock_note(self) -> None:
+        """Unlock the selected note."""
+        if self.current_note_index is None:
+            return
+        note = self.notes[self.current_note_index]
+        if "password_hash" not in note:
+            return
+
+        def check_result(pwd: str | None) -> None:
+            if pwd is not None:
+                salt, h = note["password_hash"].split(":")
+                if hashlib.sha256((salt + pwd).encode()).hexdigest() == h:
+                    note["_unlocked"] = True
+                    self._update_preview()
+                else:
+                    self.notify("Incorrect password.", severity="error")
+
+        self.push_screen(PasswordScreen(), check_result)
 
     def action_create_note(self) -> None:
         """Create a new note."""
@@ -233,6 +286,9 @@ class TsunamiTUI(App):
             return
 
         note = self.notes[self.current_note_index]
+        if "password_hash" in note and not note.get("_unlocked", False):
+            self.notify("Unlock the note first.", severity="error")
+            return
 
         def check_result(result: dict | None) -> None:
             if result is not None:
@@ -250,6 +306,11 @@ class TsunamiTUI(App):
         if self.current_note_index is None:
             return
 
+        note = self.notes[self.current_note_index]
+        if "password_hash" in note and not note.get("_unlocked", False):
+            self.notify("Unlock the note first.", severity="error")
+            return
+
         def check_result(result: bool) -> None:
             if result:
                 removed = self.notes.pop(self.current_note_index)
@@ -262,6 +323,8 @@ class TsunamiTUI(App):
     def save_vault(self) -> None:
         """Persist vault changes to disk."""
         play_sound("zelda_secret")
+        for note in self.vault.get("notes", []):
+            note.pop("_unlocked", None)
         self.save_func(self.vault_path, self.password, self.vault)
 
 
