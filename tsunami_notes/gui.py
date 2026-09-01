@@ -6,6 +6,7 @@ import os
 import json
 import random
 import time
+import re
 import tkinter as tk
 from tkinter import (
     Menu,
@@ -53,12 +54,43 @@ class TsunamiGUI(ctk.CTk):
         self.configure(fg_color=self.abyssal_black)
 
         self.keyboard_sound_enabled = BooleanVar(value=True)
+        self.focus_mode_enabled = BooleanVar(value=False)
+        self.typing_timer = None
+        self.is_typing = False
+        self.last_activity = time.time()
+        self.filtered_indices = []
+
+        self.bind_all("<Any-KeyPress>", self._reset_timer)
+        self.bind_all("<Any-Button>", self._reset_timer)
+        self.bind_all("<Motion>", self._reset_timer)
+        self.after(10000, self._check_inactivity)
 
         self._build_ui()
         self._refresh_list()
         self.status_var.set("System Ready.")
 
-    def _build_ui(self):
+    def _reset_timer(self, event=None):  # pylint: disable=unused-argument
+        self.last_activity = time.time()
+
+    def _check_inactivity(self):
+        if time.time() - getattr(self, "last_activity", time.time()) > 300:
+            self.withdraw()
+            # pylint: disable=import-outside-toplevel
+            from .audio import stop_focus_mode
+
+            stop_focus_mode()
+            pwd = simpledialog.askstring(
+                "Locked", "Session locked. Enter master password:", show="*"
+            )
+            if pwd == self.password:
+                self.deiconify()
+                self.last_activity = time.time()
+            else:
+                self.destroy()
+                return
+        self.after(10000, self._check_inactivity)
+
+    def _build_ui(self):  # pylint: disable=too-many-statements
         """Construct the UI widgets."""
         # Menu Bar
         menubar = Menu(self, bg=self.abyssal_black, fg=self.neon_cyan)
@@ -71,7 +103,13 @@ class TsunamiGUI(ctk.CTk):
         settings_menu.add_checkbutton(
             label="Keyboard Sounds", variable=self.keyboard_sound_enabled
         )
+        settings_menu.add_checkbutton(
+            label="Focus Mode",
+            variable=self.focus_mode_enabled,
+            command=self._on_focus_mode_toggle,
+        )
         settings_menu.add_separator()
+        settings_menu.add_command(label="Revisions", command=self._cmd_revisions)
         settings_menu.add_command(label="Export", command=self._cmd_export)
         settings_menu.add_command(label="Import", command=self._cmd_import)
         settings_menu.add_command(label="Trash", command=self._cmd_trash)
@@ -111,15 +149,20 @@ class TsunamiGUI(ctk.CTk):
         )
         btn_save.pack(side="left", padx=5)
 
-        btn_search = ctk.CTkButton(
-            toolbar,
-            text="Search",
-            command=self._cmd_search,
-            fg_color="#004444",
-            text_color=self.neon_cyan,
-            hover_color="#008888",
+        ttk_label = tk.Label(
+            toolbar, text="Search:", bg=self.abyssal_black, fg=self.neon_cyan
         )
-        btn_search.pack(side="right", padx=5)
+        ttk_label.pack(side="left", padx=(15, 2))
+        self.search_var = tk.StringVar()
+        self.search_var.trace_add("write", lambda *args: self._refresh_list())
+        search_entry = ctk.CTkEntry(
+            toolbar,
+            textvariable=self.search_var,
+            fg_color="#0a192f",
+            text_color=self.terminal_green,
+            border_color=self.neon_cyan,
+        )
+        search_entry.pack(side="left", padx=2, pady=2)
 
         # Main Content
         main_frame = ctk.CTkFrame(self, fg_color="transparent")
@@ -168,7 +211,11 @@ class TsunamiGUI(ctk.CTk):
         self.body_text.pack(side="top", fill="both", expand=True)
 
         self.body_text.bind("<KeyPress>", self._on_key_press)
+        self.body_text.bind("<KeyRelease>", self._highlight_markdown)
         self.title_entry.bind("<KeyPress>", self._on_key_press)
+
+        self.body_text.tag_configure("bold", font=("Consolas", 14, "bold"))
+        self.body_text.tag_configure("italic", font=("Consolas", 14, "italic"))
 
         # Status Bar
         self.status_var = StringVar()
@@ -187,29 +234,82 @@ class TsunamiGUI(ctk.CTk):
         self.overlay.place(x=0, y=0, relwidth=1, relheight=1)
         tk.Misc.lower(self.overlay)  # Hide it initially by pushing it back
 
+    def _on_focus_mode_toggle(self):
+        from .audio import stop_focus_mode  # pylint: disable=import-outside-toplevel
+
+        if not self.focus_mode_enabled.get():
+            stop_focus_mode()
+            self.is_typing = False
+        self.last_activity = time.time()
+        if self.typing_timer:
+            self.after_cancel(self.typing_timer)
+            self.typing_timer = None
+
+    def _stop_typing(self):
+        from .audio import stop_focus_mode  # pylint: disable=import-outside-toplevel
+
+        self.is_typing = False
+        self.last_activity = time.time()
+        stop_focus_mode()
+
     def _on_key_press(self, event):  # pylint: disable=unused-argument
-        if self.keyboard_sound_enabled.get():
+        if self.keyboard_sound_enabled.get() and not self.focus_mode_enabled.get():
             play_sound("keyboard_click")
+        elif self.focus_mode_enabled.get():
+            if not self.is_typing:
+                self.is_typing = True
+                play_sound("keyboard_click")  # Should be typing sound
+
+            if self.typing_timer:
+                self.after_cancel(self.typing_timer)
+            self.typing_timer = self.after(3000, self._stop_typing)
+
+    def _highlight_markdown(self, event=None):  # pylint: disable=unused-argument
+        self.body_text.tag_remove("bold", "1.0", "end")
+        self.body_text.tag_remove("italic", "1.0", "end")
+
+        content = self.body_text.get("1.0", "end")
+        bold_pattern = r"\*\*(.*?)\*\*"
+        italic_pattern = r"\*(.*?)\*"
+
+        def apply_tag(pattern, tag_name):
+            for match in re.finditer(pattern, content):
+                start_idx = match.start()
+                end_idx = match.end()
+                start_str = f"1.0+{start_idx}c"
+                end_str = f"1.0+{end_idx}c"
+                self.body_text.tag_add(tag_name, start_str, end_str)
+
+        apply_tag(bold_pattern, "bold")
+        apply_tag(italic_pattern, "italic")
 
     def _refresh_list(self):
         self.listbox.configure(state="normal")
         self.listbox.delete("1.0", "end")
+        query = self.search_var.get().lower() if hasattr(self, "search_var") else ""
+        self.filtered_indices = []
+        display_idx = 1
         for i, note in enumerate(self.vault.get("notes", [])):
             title = note.get("title", "(untitled)")
-            self.listbox.insert("end", f"{i+1}. {title}\n")
+            body = note.get("body", "")
+            if query in title.lower() or query in body.lower():
+                self.filtered_indices.append(i)
+                self.listbox.insert("end", f"{display_idx}. {title}\n")
+                display_idx += 1
         self.listbox.configure(state="disabled")
 
     def _on_list_click(self, event):
         index = self.listbox.index(f"@{event.x},{event.y}")
         line_num = int(index.split(".")[0]) - 1
-        notes = self.vault.get("notes", [])
-        if 0 <= line_num < len(notes):
-            self.current_index = line_num
-            note = notes[line_num]
+        if 0 <= line_num < len(self.filtered_indices):
+            actual_idx = self.filtered_indices[line_num]
+            self.current_index = actual_idx
+            note = self.vault["notes"][actual_idx]
             self.title_entry.delete(0, "end")
             self.title_entry.insert(0, note.get("title", ""))
             self.body_text.delete("1.0", "end")
             self.body_text.insert("1.0", note.get("body", ""))
+            self._highlight_markdown()
 
     def _play_overlay_animation(self, anim_type):
         tk.Misc.lift(self.overlay)
@@ -304,6 +404,16 @@ class TsunamiGUI(ctk.CTk):
             new_body = self.body_text.get("1.0", "end-1c")
 
             note = self.vault["notes"][self.current_index]
+
+            # Save revision
+            if note.get("title") != new_title or note.get("body") != new_body:
+                rev = {
+                    "title": note.get("title", ""),
+                    "body": note.get("body", ""),
+                    "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                }
+                note.setdefault("revisions", []).append(rev)
+
             note["title"] = new_title
             note["body"] = new_body
             self._save_vault(anim="save")
@@ -315,6 +425,43 @@ class TsunamiGUI(ctk.CTk):
             self._play_overlay_animation(anim)
         play_sound("zelda_secret")
         self.save_vault_fn(self.vault_path, self.password, self.vault)
+
+    def _cmd_revisions(self):
+        if self.current_index is None:
+            self._show_info("Revisions", "Select a note first.")
+            return
+
+        note = self.vault["notes"][self.current_index]
+        revisions = note.get("revisions", [])
+        if not revisions:
+            self._show_info("Revisions", "No revisions found for this note.")
+            return
+
+        results = []
+        for idx, rev in enumerate(revisions, start=1):
+            results.append(f"[{idx}] {rev.get('timestamp', 'Unknown')}")
+
+        rev_idx = simpledialog.askstring(
+            "Revisions",
+            "Revisions:\n" + "\n".join(results) + "\n\nEnter index to rollback:",
+        )
+        if rev_idx and rev_idx.isdigit():
+            idx = int(rev_idx) - 1
+            if 0 <= idx < len(revisions):
+                rev = revisions[idx]
+                note["title"] = rev.get("title", note["title"])
+                note["body"] = rev.get("body", note["body"])
+                self._save_vault(anim="save")
+                self._refresh_list()
+
+                self.title_entry.delete(0, "end")
+                self.title_entry.insert(0, note["title"])
+                self.body_text.delete("1.0", "end")
+                self.body_text.insert("1.0", note["body"])
+                self._highlight_markdown()
+                self._show_info("Revisions", "Note rolled back successfully.")
+            else:
+                self._show_error("Error", "Invalid index.")
 
     def _cmd_search(self):
         query = simpledialog.askstring("Search", "Enter keyword:")

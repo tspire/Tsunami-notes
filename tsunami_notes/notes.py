@@ -15,7 +15,7 @@ from rich.console import Console
 from rich.live import Live
 from rich.markdown import Markdown
 from rich.panel import Panel
-from rich.prompt import Prompt
+from rich.prompt import Confirm, Prompt
 from rich.table import Table
 from rich.text import Text
 
@@ -83,6 +83,62 @@ def save_vault(path: str, password: str, vault: dict) -> None:
     """Encrypt and persist *vault* to *path*."""
     with console.status("Encrypting vault...", spinner="dots"):
         crypto.save_vault(path, password, vault)
+
+
+def set_duress_password(vault_path: str, password: str) -> None:
+    """Set the duress password and save its hash to a .meta file."""
+    salt = os.urandom(32)
+    key = crypto.derive_key(password, salt)
+    meta_path = vault_path + ".meta"
+    fd = os.open(meta_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        json.dump(
+            {
+                "duress_salt": salt.hex(),
+                "duress_hash": key.hex(),
+            },
+            f,
+        )
+
+
+def clear_duress_password(vault_path: str) -> None:
+    """Remove the duress password metadata."""
+    meta_path = vault_path + ".meta"
+    if os.path.exists(meta_path):
+        os.remove(meta_path)
+
+
+def check_duress_password(vault_path: str, password: str) -> bool:
+    """Check if the provided password is the duress password."""
+    meta_path = vault_path + ".meta"
+    if not os.path.exists(meta_path):
+        return False
+    try:
+        with open(meta_path, "r", encoding="utf-8") as f:
+            meta = json.load(f)
+        salt = bytes.fromhex(meta["duress_salt"])
+        expected_hash = bytes.fromhex(meta["duress_hash"])
+        actual_hash = crypto.derive_key(password, salt)
+        return actual_hash == expected_hash
+    except Exception:  # pylint: disable=broad-except
+        return False
+
+
+def handle_duress(vault_path: str) -> None:
+    """Destroy the vault securely by overwriting with random data."""
+    paths = [vault_path, vault_path + ".meta", vault_path + ".fake"]
+    for p in paths:
+        if os.path.exists(p):
+            size = os.path.getsize(p)
+            try:
+                with open(p, "wb") as f:
+                    f.write(os.urandom(size))
+            except OSError:
+                pass
+            try:
+                os.remove(p)
+            except OSError:
+                pass
 
 
 # ---------------------------------------------------------------------------
@@ -185,7 +241,7 @@ def add_note(
     read_limit: int | None = None,
 ) -> None:
     """Append a new note with *title* and *body* to *vault*."""
-    note = {"title": title, "body": body}
+    note = {"title": title, "body": body, "updated_at": time.time()}
     if tags:
         note["tags"] = tags
     if ttl is not None:
@@ -246,17 +302,118 @@ def edit_note(
     if not 1 <= index <= len(notes):
         console.print(f"[bold red]Error: note index {index} out of range.[/bold red]")
         return False
+
+    note = notes[index - 1]
+
+    revision = {
+        "title": note.get("title", ""),
+        "body": note.get("body", ""),
+        "updated_at": note.get("updated_at", time.time()),
+    }
+    note.setdefault("revisions", []).append(revision)
+
     if title is not None:
-        notes[index - 1]["title"] = title
+        note["title"] = title
     if body is not None:
-        notes[index - 1]["body"] = body
+        note["body"] = body
     if tags is not None:
-        notes[index - 1]["tags"] = tags
+        note["tags"] = tags
     if ttl is not None:
-        notes[index - 1]["expires_at"] = time.time() + ttl
+        note["expires_at"] = time.time() + ttl
     if read_limit is not None:
-        notes[index - 1]["read_limit"] = read_limit
+        note["read_limit"] = read_limit
+
+    note["updated_at"] = time.time()
+
     play_fullscreen_anim("edit", f"Note {index} updated.")
+    return True
+
+
+def list_revisions(vault: dict, index: int) -> None:
+    """List all revisions for the note at *index*."""
+    notes = vault.get("notes", [])
+    if not 1 <= index <= len(notes):
+        console.print(f"[bold red]Error: note index {index} out of range.[/bold red]")
+        return
+    note = notes[index - 1]
+    revisions = note.get("revisions", [])
+    if not revisions:
+        console.print("[yellow]No revisions found for this note.[/yellow]")
+        return
+
+    play_fullscreen_anim("list", "")
+
+    table = Table(title=f"Revisions for Note {index}")
+    table.add_column("Rev ID", justify="right", style="cyan", no_wrap=True)
+    table.add_column("Timestamp", style="green")
+    table.add_column("Title", style="magenta")
+
+    for idx, rev in enumerate(revisions, start=1):
+        ts = rev.get("updated_at", 0)
+        ts_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts))
+        title = rev.get("title", "(untitled)")
+        table.add_row(str(idx), ts_str, title)
+
+    console.print(table)
+
+
+def view_revision(vault: dict, index: int, rev_index: int) -> None:
+    """View a specific revision of a note."""
+    notes = vault.get("notes", [])
+    if not 1 <= index <= len(notes):
+        console.print(f"[bold red]Error: note index {index} out of range.[/bold red]")
+        return
+    note = notes[index - 1]
+    revisions = note.get("revisions", [])
+    if not 1 <= rev_index <= len(revisions):
+        console.print(
+            f"[bold red]Error: revision index {rev_index} out of range.[/bold red]"
+        )
+        return
+    rev = revisions[rev_index - 1]
+    title = rev.get("title", "")
+    body = rev.get("body", "")
+
+    play_fullscreen_anim("show", "")
+
+    ts = rev.get("updated_at", 0)
+    ts_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts))
+    subtitle = f"Revision from {ts_str}"
+
+    panel = Panel(
+        Markdown(body), title=f"[Revision] {title}", subtitle=subtitle, expand=False
+    )
+    console.print(panel)
+
+
+def rollback_revision(vault: dict, index: int, rev_index: int) -> bool:
+    """Rollback note at *index* to *rev_index*."""
+    notes = vault.get("notes", [])
+    if not 1 <= index <= len(notes):
+        console.print(f"[bold red]Error: note index {index} out of range.[/bold red]")
+        return False
+    note = notes[index - 1]
+    revisions = note.get("revisions", [])
+    if not 1 <= rev_index <= len(revisions):
+        console.print(
+            f"[bold red]Error: revision index {rev_index} out of range.[/bold red]"
+        )
+        return False
+
+    rev = revisions[rev_index - 1]
+
+    current_rev = {
+        "title": note.get("title", ""),
+        "body": note.get("body", ""),
+        "updated_at": note.get("updated_at", time.time()),
+    }
+    note.setdefault("revisions", []).append(current_rev)
+
+    note["title"] = rev.get("title", "")
+    note["body"] = rev.get("body", "")
+    note["updated_at"] = time.time()
+
+    play_fullscreen_anim("edit", f"Note {index} rolled back to revision {rev_index}.")
     return True
 
 
@@ -404,9 +561,10 @@ def search_notes(
     else:
         console.print(table)
 
+    # CLI
+    # ---------------------------------------------------------------------------
 
-# CLI
-# ---------------------------------------------------------------------------
+    # pylint: disable=too-many-statements
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -474,6 +632,19 @@ def build_parser() -> argparse.ArgumentParser:
     trash_restore_p.add_argument("index", type=int, help="1-based index in trash.")
 
     trash_sub.add_parser("empty", help="Empty the trash.")
+
+    rev_p = sub.add_parser("revisions", help="Manage note revisions.")
+    rev_p.add_argument("index", type=int, help="1-based note index.")
+    rev_sub = rev_p.add_subparsers(dest="rev_cmd", required=True)
+    rev_sub.add_parser("list", help="List all revisions for the note.")
+
+    rev_view_p = rev_sub.add_parser("view", help="View a specific revision.")
+    rev_view_p.add_argument("rev_index", type=int, help="1-based revision index.")
+
+    rev_rollback_p = rev_sub.add_parser(
+        "rollback", help="Rollback to a specific revision."
+    )
+    rev_rollback_p.add_argument("rev_index", type=int, help="1-based revision index.")
 
     sub.add_parser("interactive", help="Start an interactive session.")
 
@@ -577,8 +748,21 @@ def _run_command(args, vault, vault_path, password) -> tuple[bool, str]:
         else:
             list_trash(vault)
 
+    elif args.command == "revisions":
+        if args.rev_cmd == "list":
+            list_revisions(vault, args.index)
+        elif args.rev_cmd == "view":
+            view_revision(vault, args.index, args.rev_index)
+        elif args.rev_cmd == "rollback":
+            modified = rollback_revision(vault, args.index, args.rev_index)
+
     elif args.command == "passwd":
         password = _prompt_password(confirm=True, prompt="New master password: ")
+        if Confirm.ask("Set a duress/self-destruct password?"):
+            duress = _prompt_password(confirm=True, prompt="New duress password: ")
+            set_duress_password(vault_path, duress)
+        else:
+            clear_duress_password(vault_path)
         play_fullscreen_anim("passwd", "Master password changed.")
         modified = True
 
@@ -681,11 +865,23 @@ def main(argv: list[str] | None = None) -> int:
 
     if not password:
         password = _prompt_password(confirm=is_new_vault)
+        if is_new_vault:
+            if Confirm.ask("Set a duress/self-destruct password?"):
+                duress = _prompt_password(confirm=True, prompt="New duress password: ")
+                set_duress_password(vault_path, duress)
 
     try:
         vault = load_vault(vault_path, password)
         play_sound("zelda_secret")
     except ValueError as exc:
+        if check_duress_password(vault_path, password):
+            handle_duress(vault_path)
+            play_sound("mgs_alert")
+            console.print(
+                "[bold red]Duress password entered. Vault destroyed.[/bold red]"
+            )
+            return 1
+
         fake_vault_path = vault_path + ".fake"
         if os.path.exists(fake_vault_path):
             try:

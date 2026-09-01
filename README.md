@@ -113,6 +113,14 @@ tsunami tui
 
 Launch the graphical interface (Tkinter) or terminal user interface (Textual) for a richer experience.
 
+### TUI
+
+```bash
+tsunami tui
+```
+
+Launch the Textual-based terminal UI.
+
 ### CLI
 
 ```bash
@@ -131,14 +139,15 @@ On subsequent runs you are prompted for the existing master password.
 | `view <index>` | Display a note |
 | `edit <index> [--title T] [--body B]` | Edit a note |
 | `delete <index>` | Delete a note |
-| `search <keyword>` | Search notes by keyword |
+| `search <query>` | Search note titles and bodies |
 | `export <file>` | Export the decrypted vault to JSON |
 | `import <file>` | Import notes from a JSON file |
 | `trash` | Manage trash (`list`, `restore <index>`, `empty`) |
-| `interactive` | Start an interactive session |
+| `revisions` | Manage note revisions (`list`, `view`, `rollback`) |
 | `passwd` | Change the master password |
-| `tui` | Launch the Textual TUI |
+| `interactive` | Start an interactive session |
 | `gui` | Launch the Tkinter GUI |
+| `tui` | Launch the Textual TUI |
 | `duress-setup` | Set up a duress PIN/password and fake vault |
 | `agent` | Manage background password agent (`start`, `stop`, `status`) |
 | `unlock` | Cache the master password in the agent for this session |

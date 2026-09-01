@@ -191,6 +191,21 @@ class TestNoteOperations(unittest.TestCase):
         edit_note(v, 1, title=None, body=None, tags=["tag2"])
         self.assertEqual(v["notes"][0]["tags"], ["tag2"])
 
+    def test_revisions(self):
+        from tsunami_notes.notes import add_note, edit_note, rollback_revision
+
+        v = self._vault()
+        add_note(v, "T1", "B1")
+        edit_note(v, 1, title="T2", body="B2")
+        self.assertEqual(v["notes"][0]["title"], "T2")
+        self.assertEqual(len(v["notes"][0]["revisions"]), 1)
+        self.assertEqual(v["notes"][0]["revisions"][0]["title"], "T1")
+
+        rollback_revision(v, 1, 1)
+        self.assertEqual(v["notes"][0]["title"], "T1")
+        self.assertEqual(len(v["notes"][0]["revisions"]), 2)
+        self.assertEqual(v["notes"][0]["revisions"][1]["title"], "T2")
+
     def test_search_notes(self):
         from tsunami_notes.notes import search_notes
         from unittest.mock import patch
@@ -213,6 +228,43 @@ class TestNoteOperations(unittest.TestCase):
         with patch("sys.stdout", new_callable=io.StringIO) as mock_stdout:
             search_notes(v, "xyz")
             self.assertIn("No matching notes found", mock_stdout.getvalue())
+
+
+class TestDuress(unittest.TestCase):
+    def setUp(self):
+        fd, self.tmp = tempfile.mkstemp(suffix=".vault")
+        os.close(fd)
+        os.remove(self.tmp)
+
+    def tearDown(self):
+        for p in [self.tmp, self.tmp + ".meta", self.tmp + ".fake"]:
+            if os.path.exists(p):
+                os.remove(p)
+
+    def test_duress_flow(self):
+        from tsunami_notes.notes import (
+            save_vault,
+            set_duress_password,
+            check_duress_password,
+            handle_duress,
+        )
+
+        vault = {"notes": [{"title": "secret", "body": "data"}]}
+        save_vault(self.tmp, "main_pw", vault)
+
+        # Set duress password
+        set_duress_password(self.tmp, "duress_pw")
+
+        # Check passwords
+        self.assertFalse(check_duress_password(self.tmp, "main_pw"))
+        self.assertFalse(check_duress_password(self.tmp, "wrong_pw"))
+        self.assertTrue(check_duress_password(self.tmp, "duress_pw"))
+
+        # Handle duress
+        handle_duress(self.tmp)
+
+        self.assertFalse(os.path.exists(self.tmp))
+        self.assertFalse(os.path.exists(self.tmp + ".meta"))
 
 
 if __name__ == "__main__":
